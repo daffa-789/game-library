@@ -18,10 +18,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:             "Game Library",
-		Width:             1400,
-		Height:            880,
-		MinWidth:          980,
-		MinHeight:         620,
+		Width:             windowWidth,
+		Height:            windowHeight,
+		MinWidth:          windowMinWidth,
+		MinHeight:         windowMinHeight,
 		DisableResize:     false,
 		Fullscreen:        false,
 		Frameless:         false,

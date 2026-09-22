@@ -11,3 +11,4 @@ Thumbs.db
 # Artefak build: jangan ikut ter-commit
 *.exe
 build/windows/installer/tmp/
+build/bukti-*.png

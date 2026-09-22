@@ -262,6 +262,44 @@ func TestHard_LibraryNormalizesLegacyAndRejectsOversize(t *testing.T) {
 	}
 }
 
+func TestHard_WindowFitsScreenKeepsTitleBarVisible(t *testing.T) {
+	// Kasus nyata: laptop 1920x1080 dengan scaling 125% -> layar logis 1536x864,
+	// work area ~816px. Jendela setinggi 880px tidak muat dan Windows menggeser
+	// bagian atas jendela keluar layar sehingga title bar (dan tombol close)
+	// tidak terlihat sama sekali.
+	cases := []struct {
+		name           string
+		dw, dh, sw, sh int
+		wantW, wantH   int
+	}{
+		{"LayarLegaTetapAsli", 1400, 880, 2560, 1440, 1400, 880},
+		{"Laptop1080pScale125", 1400, 880, 1536, 864, 1400, 784},
+		{"Laptop1080pScale100", 1400, 880, 1920, 1080, 1400, 880},
+		{"LayarKecil", 1400, 880, 1024, 600, 1008, 520},
+		{"LayarTidakDiketahui", 1400, 880, 0, 0, 1400, 880},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotW, gotH := fitWindowSize(tc.dw, tc.dh, tc.sw, tc.sh)
+			if gotW != tc.wantW || gotH != tc.wantH {
+				t.Errorf("fitWindowSize(%dx%d pada layar %dx%d) = (%d,%d), ingin (%d,%d)",
+					tc.dw, tc.dh, tc.sw, tc.sh, gotW, gotH, tc.wantW, tc.wantH)
+			}
+			if tc.sw > 0 && tc.sh > 0 {
+				if gotH > tc.sh-taskbarAllowance-titleBarAllowance {
+					t.Errorf("tinggi %d masih melebihi work area layar %d", gotH, tc.sh)
+				}
+				if gotW > tc.sw {
+					t.Errorf("lebar %d melebihi lebar layar %d", gotW, tc.sw)
+				}
+			}
+			if gotW <= 0 || gotH <= 0 {
+				t.Errorf("ukuran harus positip, dapat %dx%d", gotW, gotH)
+			}
+		})
+	}
+}
+
 func TestHard_OpenExternalRequiresHost(t *testing.T) {
 	app, _ := setupTestApp(t)
 	for _, bad := range []string{"https:///path", "http://", "//example.com/x", "mailto:a@b.c"} {

@@ -442,10 +442,17 @@ if ($Feature -eq 0 -or $Feature -eq 9) {
 
     Invoke-TestCase -Id "T2.9.5" -Tier "2" -Feature "F9" -Name "Window dimensions enforce MinWidth >= 980 and MinHeight >= 620" -ScriptBlock {
         $mainGo = Get-Content (Join-Path $ProjectRoot "main.go") -Raw
-        Assert-Matches "MinWidth:\s*980" $mainGo "main.go must specify MinWidth: 980"
-        Assert-Matches "MinHeight:\s*620" $mainGo "main.go must specify MinHeight: 620"
-        Assert-Matches "Width:\s*1400" $mainGo "main.go must specify Width: 1400"
-        Assert-Matches "Height:\s*880" $mainGo "main.go must specify Height: 880"
+        $goSrc = Get-GoSource $ProjectRoot
+        # Nilai ukurannya hidup di konstanta window.go (dipakai juga untuk
+        # membatasi jendela terhadap work area), main.go harus merujuknya.
+        Assert-Matches "windowMinWidth\s*=\s*980" $goSrc "windowMinWidth must be 980"
+        Assert-Matches "windowMinHeight\s*=\s*620" $goSrc "windowMinHeight must be 620"
+        Assert-Matches "windowWidth\s*=\s*1400" $goSrc "windowWidth must be 1400"
+        Assert-Matches "windowHeight\s*=\s*880" $goSrc "windowHeight must be 880"
+        Assert-Matches "MinWidth:\s*windowMinWidth" $mainGo "main.go must wire MinWidth"
+        Assert-Matches "MinHeight:\s*windowMinHeight" $mainGo "main.go must wire MinHeight"
+        Assert-Matches "Width:\s*windowWidth" $mainGo "main.go must wire Width"
+        Assert-Matches "Height:\s*windowHeight" $mainGo "main.go must wire Height"
     }
 }
 

@@ -169,6 +169,10 @@ func newHTTPClient(timeout time.Duration) *http.Client {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// Jendela bisa lebih tinggi dari work area (mis. laptop 1080p @125%), dan
+	// Windows akan mendorong bagian atasnya keluar layar sampai title bar
+	// beserta tombol close ikut hilang. Sesuaikan sebelum user menyadarinya.
+	a.ensureWindowFitsScreen()
 }
 
 // requestCtx memakai context jendela Wails bila sudah tersedia, sehingga semua
