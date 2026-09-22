@@ -327,9 +327,7 @@ function openForm(game, prefill) {
   $('#f-title').value = game ? game.title || '' : '';
   $('#f-link').value = game ? game.link || '' : '';
   $('#f-genre').value = game ? game.genre || '' : '';
-  $('#f-size').value = game ? game.size || '' : '';
   $('#f-price').value = game ? game.price || '' : '';
-  $('#f-thumburl').value = game && game.thumbnail && !game.thumbnail.startsWith('glib://') ? game.thumbnail : '';
   fillSpecInputs(game ? game.specs : null);
 
   // Prefill dari Steam (hanya saat tambah game baru)
@@ -338,7 +336,6 @@ function openForm(game, prefill) {
     if (prefill.genre) $('#f-genre').value = prefill.genre;
     if (prefill.thumbnail) {
       state.pendingThumb = prefill.thumbnail;
-      if (!prefill.thumbnail.startsWith('glib://')) $('#f-thumburl').value = prefill.thumbnail;
     }
     if (prefill.specs) fillSpecInputs(prefill.specs);
     if (prefill.appId) state.pendingSteamAppId = prefill.appId;
@@ -383,7 +380,6 @@ async function saveGameFromForm() {
       title, link,
       thumbnail: thumb,
       genre: $('#f-genre').value.trim(),
-      size: $('#f-size').value.trim(),
       price: $('#f-price').value.trim(),
       steamAppId: old.steamAppId || '',
       specs: readSpecsFromForm(),
@@ -395,7 +391,6 @@ async function saveGameFromForm() {
       title, link,
       thumbnail: thumb,
       genre: $('#f-genre').value.trim(),
-      size: $('#f-size').value.trim(),
       price: $('#f-price').value.trim(),
       steamAppId: state.pendingSteamAppId || '',
       specs: readSpecsFromForm(),
@@ -554,13 +549,8 @@ function bindEvents() {
       toast('Gagal memuat gambar', true);
     }
   });
-  $('#f-thumburl').addEventListener('input', (e) => {
-    state.pendingThumb = e.target.value.trim();
-    updateThumbPreview();
-  });
   $('#f-thumb-clear').addEventListener('click', () => {
     state.pendingThumb = '';
-    $('#f-thumburl').value = '';
     updateThumbPreview();
   });
   $('#f-thumb-preview').addEventListener('error', () => {
