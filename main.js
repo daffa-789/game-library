@@ -146,6 +146,7 @@ function sanitizeGames(games) {
     genre: str(g && g.genre, 120),
     size: str(g && g.size, 60),
     price: str(g && g.price, 60),
+    steamAppId: str(g && g.steamAppId, 20),
     specs: {
       min: spec(g && g.specs && g.specs.min),
       rec: spec(g && g.specs && g.specs.rec),
@@ -230,6 +231,83 @@ ipcMain.handle('shell:openExternal', async (e, url) => {
 ipcMain.handle('clipboard:write', (e, text) => {
   clipboard.writeText(String(text == null ? '' : text));
   return true;
+});
+
+// ---------------------------------------------------------------------------
+// Impor data game dari link Steam Store (API publik Steam)
+// ---------------------------------------------------------------------------
+
+const STEAM_LABEL_MAP = {
+  os: 'os', processor: 'cpu', memory: 'ram', graphics: 'gpu', directx: 'dx',
+  storage: 'storage', network: 'net', 'sound card': 'sound', 'additional notes': 'notes',
+};
+
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseSteamRequirements(html) {
+  const out = {};
+  const re = /<li>\s*<strong>\s*([^:<>]+?)\s*:?\s*<\/strong>([\s\S]*?)<\/li>/gi;
+  let m;
+  while ((m = re.exec(html || '')) !== null) {
+    const key = STEAM_LABEL_MAP[m[1].toLowerCase().trim()];
+    if (key) out[key] = htmlToText(m[2]).slice(0, 400);
+  }
+  return out;
+}
+
+ipcMain.handle('steam:import', async (e, url) => {
+  const m = String(url || '').match(/store\.steampowered\.com\/app\/(\d+)/i);
+  if (!m) throw new Error('Link tidak dikenali. Gunakan link seperti https://store.steampowered.com/app/271590/');
+  const appId = m[1];
+
+  const res = await fetch(
+    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english`,
+    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GameLibrary/1.0' } },
+  );
+  if (!res.ok) throw new Error('Gagal menghubungi Steam Store (HTTP ' + res.status + ')');
+  const body = await res.json();
+  const entry = body && body[appId];
+  if (!entry || !entry.success || !entry.data) {
+    throw new Error('Data game tidak ditemukan di Steam. Cek lagi link-nya.');
+  }
+  const data = entry.data;
+
+  const specs = {
+    min: parseSteamRequirements(data.pc_requirements && data.pc_requirements.minimum),
+    rec: parseSteamRequirements(data.pc_requirements && data.pc_requirements.recommended),
+  };
+
+  // Unduh gambar header Steam (460x215) dan simpan sebagai thumbnail lokal
+  let thumbnail = '';
+  try {
+    const imgRes = await fetch(data.header_image, { headers: { 'User-Agent': 'Mozilla/5.0 GameLibrary/1.0' } });
+    if (imgRes.ok) {
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      const ext = (path.extname(new URL(data.header_image).pathname) || '.jpg').toLowerCase();
+      const name = `steam-${appId}-${crypto.randomBytes(4).toString('hex')}${ext}`;
+      ensureDirs();
+      fs.writeFileSync(path.join(thumbsDir, name), buf);
+      thumbnail = `${THUMB_SCHEME}://thumb/${name}`;
+    }
+  } catch (_) { /* thumbnail opsional: biarkan kosong bila gagal */ }
+
+  return {
+    appId,
+    title: data.name || '',
+    thumbnail,
+    genre: (data.genres || []).map((g) => g.description).join(', '),
+    developer: (data.developers || []).join(', '),
+    releaseDate: (data.release_date && data.release_date.date) || '',
+    specs,
+  };
 });
 
 // ---------------------------------------------------------------------------

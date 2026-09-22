@@ -85,6 +85,15 @@ input, select { font-family: inherit; }
 }
 .btn.danger:hover { background: #8a3a3a; }
 
+.btn.steam {
+  background: #1b2838;
+  border: 1px solid #3d6a8c;
+  color: #66c0f4;
+}
+.btn.steam:hover { background: #2a475e; border-color: #66c0f4; }
+
+.error-text { color: #e57373; font-size: 13px; margin: 10px 0 0; }
+
 .btn.big { padding: 12px 22px; font-size: 14px; }
 
 .btn.small { padding: 6px 10px; font-size: 12px; }

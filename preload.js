@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('api', {
   deleteThumbnail: (ref) => ipcRenderer.invoke('thumb:delete', ref),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
+  steamImport: (url) => ipcRenderer.invoke('steam:import', url),
 });

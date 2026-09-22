@@ -33,6 +33,7 @@ const state = {
   sort: 'new',
   editingId: null,
   pendingThumb: '',
+  pendingSteamAppId: '',
   detailId: null,
   confirmAction: null,
 };
@@ -318,8 +319,9 @@ function fillSpecInputs(specs) {
   }
 }
 
-function openForm(game) {
+function openForm(game, prefill) {
   state.editingId = game ? game.id : null;
+  state.pendingSteamAppId = '';
   state.pendingThumb = game ? game.thumbnail || '' : '';
   $('#form-title').textContent = game ? 'Edit Game' : 'Tambah Game';
   $('#f-title').value = game ? game.title || '' : '';
@@ -329,10 +331,24 @@ function openForm(game) {
   $('#f-price').value = game ? game.price || '' : '';
   $('#f-thumburl').value = game && game.thumbnail && !game.thumbnail.startsWith('glib://') ? game.thumbnail : '';
   fillSpecInputs(game ? game.specs : null);
+
+  // Prefill dari Steam (hanya saat tambah game baru)
+  if (!game && prefill) {
+    if (prefill.title) $('#f-title').value = prefill.title;
+    if (prefill.genre) $('#f-genre').value = prefill.genre;
+    if (prefill.thumbnail) {
+      state.pendingThumb = prefill.thumbnail;
+      if (!prefill.thumbnail.startsWith('glib://')) $('#f-thumburl').value = prefill.thumbnail;
+    }
+    if (prefill.specs) fillSpecInputs(prefill.specs);
+    if (prefill.appId) state.pendingSteamAppId = prefill.appId;
+  }
+
   updateThumbPreview();
   clearInvalid();
   openModal('modal-form');
-  setTimeout(() => $('#f-title').focus(), 50);
+  // Fokuskan ke field link kalau prefill (karena judul sudah terisi)
+  setTimeout(() => $(prefill ? '#f-link' : '#f-title').focus(), 50);
 }
 
 function updateThumbPreview() {
@@ -369,6 +385,7 @@ async function saveGameFromForm() {
       genre: $('#f-genre').value.trim(),
       size: $('#f-size').value.trim(),
       price: $('#f-price').value.trim(),
+      steamAppId: old.steamAppId || '',
       specs: readSpecsFromForm(),
       updatedAt: now,
     });
@@ -380,6 +397,7 @@ async function saveGameFromForm() {
       genre: $('#f-genre').value.trim(),
       size: $('#f-size').value.trim(),
       price: $('#f-price').value.trim(),
+      steamAppId: state.pendingSteamAppId || '',
       specs: readSpecsFromForm(),
       createdAt: now,
       updatedAt: now,
@@ -434,11 +452,52 @@ function isModalOpen() {
 }
 
 /* ==========================================================================
-   Modal & toast helpers
+   Steam Link — impor data otomatis dari Steam Store
+   ========================================================================== */
+
+function openSteamModal() {
+  $('#steam-url').value = '';
+  $('#steam-status').classList.add('hidden');
+  $('#steam-status').textContent = '';
+  $('#steam-fetch').disabled = false;
+  $('#steam-fetch').textContent = 'Ambil Data Steam';
+  openModal('modal-steam');
+  setTimeout(() => $('#steam-url').focus(), 50);
+}
+
+async function fetchSteam() {
+  const url = $('#steam-url').value.trim();
+  if (!url) {
+    $('#steam-status').textContent = 'Masukkan link Steam Store terlebih dahulu.';
+    $('#steam-status').classList.remove('hidden');
+    return;
+  }
+
+  const btn = $('#steam-fetch');
+  btn.disabled = true;
+  btn.textContent = 'Mengambil...';
+  $('#steam-status').classList.add('hidden');
+
+  try {
+    const result = await window.api.steamImport(url);
+    closeModal();
+    openForm(null, result);
+    toast('Data terisi otomatis — tinggal isi link Google Drive');
+  } catch (err) {
+    $('#steam-status').textContent = err.message || 'Gagal mengambil data dari Steam.';
+    $('#steam-status').classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Ambil Data Steam';
+  }
+}
+
+/* ==========================================================================
+   Bind events
    ========================================================================== */
 
 function bindEvents() {
   // Header
+  $('#btn-steam').addEventListener('click', openSteamModal);
   $('#btn-add').addEventListener('click', () => openForm(null));
   $('#btn-empty-add').addEventListener('click', () => openForm(null));
   $('#search').addEventListener('input', (e) => {
@@ -515,6 +574,14 @@ function bindEvents() {
     const action = state.confirmAction;
     closeModal();
     if (action) action();
+  });
+
+  // Steam modal
+  $('#steam-close').addEventListener('click', closeModal);
+  $('#steam-cancel').addEventListener('click', closeModal);
+  $('#steam-fetch').addEventListener('click', fetchSteam);
+  $('#steam-url').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') fetchSteam();
   });
 
   // Backdrop klik -> tutup modal

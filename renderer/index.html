@@ -22,6 +22,13 @@
       <input id="search" type="text" placeholder="Cari judul game...  (Ctrl+F)" autocomplete="off" spellcheck="false">
     </div>
     <div class="topbar-actions">
+      <button id="btn-steam" class="btn steam">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"></path>
+          <path d="M12 8v8"></path><path d="M8 12h8"></path>
+        </svg>
+        Steam Link
+      </button>
       <button id="btn-add" class="btn green">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
@@ -145,6 +152,29 @@
     <div class="modal-foot">
       <button class="btn ghost" id="confirm-cancel">Batal</button>
       <button class="btn danger" id="confirm-ok">Ya, Hapus</button>
+    </div>
+  </div>
+
+  <!-- Impor dari Steam -->
+  <div class="modal small hidden" id="modal-steam">
+    <div class="modal-head">
+      <h2>Impor dari Steam</h2>
+      <button class="icon-btn" id="steam-close" title="Tutup">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="steam-url">Link halaman Steam Store</label>
+        <input id="steam-url" type="text" placeholder="https://store.steampowered.com/app/271590/" spellcheck="false" autocomplete="off">
+      </div>
+      <p id="steam-status" class="error-text hidden"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="steam-cancel">Batal</button>
+      <button class="btn green" id="steam-fetch">Ambil Data Steam</button>
     </div>
   </div>
 
