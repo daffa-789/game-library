@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="300" viewBox="0 0 1000 300">
+  <defs>
+    <linearGradient id="tg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8ad4ff"/><stop offset="1" stop-color="#66c0f4"/>
+    </linearGradient>
+  </defs>
+  
+  <g transform="translate(87.2800000000001,118.25919999999999)" fill="url(#tg)">
+    <rect x="0" y="11.414117647058823" width="22.828235294117647" height="8.152941176470588" rx="3.2611764705882353"/>
+    <rect x="7.33764705882353" y="4.076470588235294" width="8.152941176470588" height="22.828235294117647" rx="3.2611764705882353"/>
+    <circle cx="39.13411764705882" cy="8.152941176470588" r="4.239529411764706"/>
+    <circle cx="48.91764705882353" cy="17.936470588235295" r="4.239529411764706"/>
+    <circle cx="29.35058823529412" cy="17.936470588235295" r="4.239529411764706"/>
+    <circle cx="39.13411764705882" cy="27.72" r="4.239529411764706"/>
+  </g>
+  <text x="173.5200000000001" y="144" font-family="'Segoe UI Black','Segoe UI',Arial,sans-serif" font-size="77"
+        font-weight="900" fill="url(#tg)" letter-spacing="2">DAFFA GAME STORE</text>
+  <text x="173.5200000000001" y="198.04" font-family="'Segoe UI',Arial,sans-serif" font-size="16"
+        fill="#e5e5e5" fill-opacity="0.8" letter-spacing="6">TOKO GAME DIGITAL</text>
+</svg>

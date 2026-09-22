@@ -1,0 +1,52 @@
+{
+  "name": "libray-game",
+  "productName": "Game Library",
+  "version": "1.0.0",
+  "description": "Katalog game digital: cari game, cek spesifikasi, salin link download untuk pelanggan",
+  "main": "main.js",
+  "license": "MIT",
+  "author": "Daffa",
+  "scripts": {
+    "start": "electron .",
+    "make-icon": "electron . --make-icon",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.daffa.libraygame",
+    "productName": "Game Library",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis"
+        },
+        {
+          "target": "portable"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Game Library"
+    },
+    "portable": {
+      "artifactName": "GameLibrary-Portable-${version}.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3"
+  }
+}

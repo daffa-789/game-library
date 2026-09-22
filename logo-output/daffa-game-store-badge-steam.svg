@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="disc" cx="0.35" cy="0.3" r="1">
+      <stop offset="0" stop-color="#2a475e"/><stop offset="1" stop-color="#1b2838"/>
+    </radialGradient>
+    <path id="arcTop" d="M 256 256 m -186 0 a 186 186 0 1 1 372 0" fill="none"/>
+    <path id="arcBot" d="M 256 256 m 186 0 a 186 186 0 1 1 -372 0" fill="none"/>
+  </defs>
+  <circle cx="256" cy="256" r="238" fill="url(#disc)" stroke="#66c0f4" stroke-width="6"/>
+  <circle cx="256" cy="256" r="222" fill="none" stroke="#66c0f4" stroke-opacity="0.4" stroke-width="2"/>
+  <text font-family="'Segoe UI',Arial,sans-serif" font-size="37" font-weight="700" fill="#e5e5e5" letter-spacing="3">
+    <textPath href="#arcTop" startOffset="50%" text-anchor="middle">DAFFA GAME STORE</textPath>
+  </text>
+  
+  <g transform="translate(210,196)" fill="#66c0f4">
+    <rect x="0" y="18.941176470588236" width="37.88235294117647" height="13.529411764705884" rx="5.411764705882353"/>
+    <rect x="12.176470588235295" y="6.764705882352942" width="13.529411764705884" height="37.88235294117647" rx="5.411764705882353"/>
+    <circle cx="64.94117647058823" cy="13.529411764705884" r="7.03529411764706"/>
+    <circle cx="81.1764705882353" cy="29.764705882352942" r="7.03529411764706"/>
+    <circle cx="48.70588235294118" cy="29.764705882352942" r="7.03529411764706"/>
+    <circle cx="64.94117647058823" cy="46" r="7.03529411764706"/>
+  </g>
+  <text x="256" y="332" font-family="'Segoe UI Black','Segoe UI',Arial,sans-serif" font-size="52" font-weight="900"
+        fill="#66c0f4" text-anchor="middle" letter-spacing="2">DG</text>
+  <text font-family="'Segoe UI',Arial,sans-serif" font-size="17" fill="#e5e5e5" fill-opacity="0.75" letter-spacing="4">
+    <textPath href="#arcBot" startOffset="50%" text-anchor="middle">TOKO GAME DIGITAL</textPath>
+  </text>
+</svg>
