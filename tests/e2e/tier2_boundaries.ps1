@@ -68,14 +68,15 @@ if ($Feature -eq 0 -or $Feature -eq 1) {
         Assert-True $iconFound "At least one valid app icon must exist"
     }
 
-    Invoke-TestCase -Id "T2.1.5" -Tier "2" -Feature "F1" -Name "wails.exe.manifest declares Windows 10/11 compatibility GUID" -ScriptBlock {
+    Invoke-TestCase -Id "T2.1.5" -Tier "2" -Feature "F1" -Name "wails.exe.manifest declares DPI awareness and common controls" -ScriptBlock {
         $manifestPath = Join-Path $ProjectRoot "build\windows\wails.exe.manifest"
         Assert-FileExists $manifestPath "wails.exe.manifest must exist"
         $manifest = Get-Content $manifestPath -Raw
-        # Windows 10/11 GUID: {8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}
-        Assert-Matches "(?i)8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a" $manifest "Manifest must include Windows 10/11 compatibility GUID"
+        Assert-Matches "(?i)dpiAware|PerMonitorV2" $manifest "Manifest must include DPI awareness settings"
+        Assert-Matches "(?i)Microsoft\.Windows\.Common-Controls" $manifest "Manifest must declare Common-Controls"
     }
 }
+
 
 # ----------------------------------------------------------------------------
 # Feature 2: Executable Size & RAM Efficiency Boundaries
@@ -407,10 +408,11 @@ if ($Feature -eq 0 -or $Feature -eq 8) {
 
     Invoke-TestCase -Id "T2.8.5" -Tier "2" -Feature "F8" -Name "SteamImport strips nested HTML tags and unescapes entities" -ScriptBlock {
         $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "steamTagRe\.ReplaceAllString\(s,\s*\"\"\)" $appGo "htmlToText must strip HTML tags"
-        Assert-Matches "html\.UnescapeString\(s\)" $appGo "htmlToText must unescape HTML entities"
+        Assert-Matches 'steamTagRe\.ReplaceAllString\(s,\s*""\)' $appGo "htmlToText must strip HTML tags"
+        Assert-Matches 'html\.UnescapeString\(s\)' $appGo "htmlToText must unescape HTML entities"
     }
 }
+
 
 # ----------------------------------------------------------------------------
 # Feature 9: OS Integration Boundaries

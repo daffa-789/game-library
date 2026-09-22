@@ -601,8 +601,9 @@ if ($Feature -eq 0 -or $Feature -eq 13) {
 
         $filtered = $games | Where-Object { $_.id -ne "delete-me" }
         Assert-Equal 2 $filtered.Count "Must have 2 games remaining after deletion"
-        Assert-False ($filtered | Where-Object { $_.id -eq "delete-me" }) "Deleted game must not exist in list"
+        Assert-Equal 0 @($filtered | Where-Object { $_.id -eq "delete-me" }).Count "Deleted game must not exist in list"
     }
+
 
     Invoke-TestCase -Id "T1.13.4" -Tier "1" -Feature "F13" -Name "Form validation rejects game creation with empty title" -ScriptBlock {
         $title = ""

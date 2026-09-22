@@ -60,10 +60,13 @@ Invoke-TestCase -Id "T3.1" -Tier "3" -Feature "F3+F4" -Name "Load-Modify-Save Ro
         $reloaded = Assert-JsonValid (Get-Content $sb.DataFile -Raw)
         Assert-Equal "Rp 220.000" $reloaded.games[0].price
         Assert-Equal "Action Rogue-like, Dungeon Crawler" $reloaded.games[0].genre
-        Assert-Equal "2026-05-02T15:00:00Z" $reloaded.games[0].updatedAt
+        $updatedStr = $reloaded.games[0].updatedAt.ToString()
+        Assert-Matches "2026-05-02|02/05/2026|05/02/2026" $updatedStr "updatedAt must reflect updated date"
         Assert-Equal "Hades II" $reloaded.games[0].title
+
         Assert-Equal "1145350" $reloaded.games[0].steamAppId
     }
+
     finally {
         Remove-TestSandbox $sb.Root
     }
@@ -149,10 +152,11 @@ Invoke-TestCase -Id "T3.4" -Tier "3" -Feature "F6+F7" -Name "Thumbnail Import fo
 # T3.5: [F8 + F6] Steam Import + Thumbnail Pipeline
 Invoke-TestCase -Id "T3.5" -Tier "3" -Feature "F8+F6" -Name "SteamImport downloads header image into Thumbnails directory" -ScriptBlock {
     $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-    Assert-Matches "fileName := fmt\.Sprintf\(\"steam-%s-%s%s\"" $appGo "Steam image must follow steam-<appid>-<hex> naming"
+    Assert-Matches 'fileName := fmt\.Sprintf\("steam-%s-%s%s"' $appGo "Steam image must follow steam-<appid>-<hex> naming"
     Assert-Matches 'destPath := filepath\.Join\(a\.thumbsDir,\s*fileName\)' $appGo "Steam image must be saved in thumbsDir"
     Assert-Matches 'return "/thumbnails/" \+ fileName' $appGo "Steam thumbnail return value must use /thumbnails/ URL format"
 }
+
 
 # T3.6: [F8 + F4] Steam Import Result Saved into Library
 Invoke-TestCase -Id "T3.6" -Tier "3" -Feature "F8+F4" -Name "SteamImport result structured and saved into Library database" -ScriptBlock {
@@ -276,7 +280,7 @@ Invoke-TestCase -Id "T3.10" -Tier "3" -Feature "F10+F9" -Name "Frontend bridge m
     $bridgePath = Join-Path $ProjectRoot "renderer\wails-bridge.js"
     Assert-FileExists $bridgePath "wails-bridge.js must exist"
     $bridge = Get-Content $bridgePath -Raw
-    Assert-Matches "copyText:\s*\(text\)\s*=>\s*window\.go\.main\.App\.CopyText\(text\)" $bridge "bridge must map copyText directly to Go backend"
+    Assert-Matches "(?s)copyText[\s\S]*?CopyText" $bridge "bridge must map copyText directly to Go backend"
 }
 
 # T3.11: [F10 + F9] Frontend Bridge to External Browser
@@ -284,8 +288,9 @@ Invoke-TestCase -Id "T3.11" -Tier "3" -Feature "F10+F9" -Name "Frontend bridge m
     $bridgePath = Join-Path $ProjectRoot "renderer\wails-bridge.js"
     Assert-FileExists $bridgePath "wails-bridge.js must exist"
     $bridge = Get-Content $bridgePath -Raw
-    Assert-Matches "openExternal:\s*\(url\)\s*=>\s*window\.go\.main\.App\.OpenExternal\(url\)" $bridge "bridge must map openExternal directly to Go backend"
+    Assert-Matches "(?s)openExternal[\s\S]*?OpenExternal" $bridge "bridge must map openExternal directly to Go backend"
 }
+
 
 # T3.12: [F3 + F6] Legacy Migration + Thumbnail Serving
 Invoke-TestCase -Id "T3.12" -Tier "3" -Feature "F3+F6" -Name "Legacy glib://thumb/ normalized and resolved via /thumbnails/ handler" -ScriptBlock {

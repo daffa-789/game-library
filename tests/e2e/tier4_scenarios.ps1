@@ -258,8 +258,9 @@ Invoke-TestCase -Id "S5" -Tier "4" -Feature "F4+F5+F6+F7+F13" -Name "Scenario 5:
         Assert-FileExists (Join-Path $sb.ThumbsDir $thumb2) "New thumbnail 2 active"
 
         # Step 3: Delete game
-        $lib.Remove($game)
+        [void]$lib.Remove($game)
         Remove-Item (Join-Path $sb.ThumbsDir $thumb2) -Force
+
         Set-Content -Path $sb.DataFile -Value (@{ games = $lib } | ConvertTo-Json -Depth 4) -Encoding UTF8
 
         $finalLib = Assert-JsonValid (Get-Content $sb.DataFile -Raw)

@@ -18,16 +18,20 @@ foreach ($gp in $GoPaths) {
 }
 
 # Test Results Collection
-if (-not $script:TestResults) {
-    $script:TestResults = [System.Collections.Generic.List[PSCustomObject]]::new()
+if (-not $global:TestResults) {
+    $global:TestResults = [System.Collections.Generic.List[PSCustomObject]]::new()
 }
 
 function Reset-TestResults {
-    $script:TestResults.Clear()
+    if ($global:TestResults) {
+        $global:TestResults.Clear()
+    } else {
+        $global:TestResults = [System.Collections.Generic.List[PSCustomObject]]::new()
+    }
 }
 
 function Get-TestResults {
-    return $script:TestResults
+    return $global:TestResults
 }
 
 # ----------------------------------------------------------------------------
@@ -76,7 +80,7 @@ function Invoke-TestCase {
         Duration  = [math]::Round($sw.Elapsed.TotalMilliseconds, 2)
     }
 
-    $script:TestResults.Add($result)
+    $global:TestResults.Add($result)
 
     if ($passed) {
         Write-Host "  [PASS] " -ForegroundColor Green -NoNewline
@@ -94,9 +98,8 @@ function Invoke-TestCase {
         Write-Host "($($result.Duration)ms)" -ForegroundColor DarkGray
         Write-Host "         Error: $errorMessage" -ForegroundColor DarkRed
     }
-
-    return $passed
 }
+
 
 # ----------------------------------------------------------------------------
 # Assertions
@@ -104,7 +107,7 @@ function Invoke-TestCase {
 
 function Assert-True {
     param(
-        [bool]$Condition,
+        $Condition,
         [string]$Message = "Assertion failed: condition was not true",
         [string]$Details = ""
     )
@@ -117,7 +120,7 @@ function Assert-True {
 
 function Assert-False {
     param(
-        [bool]$Condition,
+        $Condition,
         [string]$Message = "Assertion failed: condition was not false",
         [string]$Details = ""
     )
@@ -127,6 +130,7 @@ function Assert-False {
         throw $msg
     }
 }
+
 
 function Assert-Equal {
     param(
@@ -173,7 +177,7 @@ function Assert-FileExists {
         [string]$Message = "Expected file to exist"
     )
     if (-not (Test-Path $Path -PathType Leaf)) {
-        throw "$Message: '$Path' was not found."
+        throw "${Message}: '$Path' was not found."
     }
 }
 
@@ -183,7 +187,7 @@ function Assert-FileNotExists {
         [string]$Message = "Expected file to NOT exist"
     )
     if (Test-Path $Path) {
-        throw "$Message: '$Path' still exists."
+        throw "${Message}: '$Path' still exists."
     }
 }
 
@@ -193,7 +197,7 @@ function Assert-DirectoryExists {
         [string]$Message = "Expected directory to exist"
     )
     if (-not (Test-Path $Path -PathType Container)) {
-        throw "$Message: '$Path' was not found."
+        throw "${Message}: '$Path' was not found."
     }
 }
 
@@ -207,9 +211,10 @@ function Assert-JsonValid {
         return $obj
     }
     catch {
-        throw "$Message: $($_.Exception.Message)"
+        throw "${Message}: $($_.Exception.Message)"
     }
 }
+
 
 # ----------------------------------------------------------------------------
 # PE Binary Inspection (MZ header, Machine, Subsystem, Size)

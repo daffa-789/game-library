@@ -52,8 +52,8 @@
 | E2E | E2E Testing Track | Independent opaque-box test runner & suites (Tiers 1-4) published via `TEST_READY.md` | none | IN_PROGRESS |
 | M1 | Backend Core & Persistence | `wails.json`, `go.mod`, `main.go`, `app.go` (`LoadLibrary`, `SaveLibrary`, `PickThumbnail`, `DeleteThumbnail`, `AssetServer.Handler`) | none | DONE |
 | M2 | Utilities & Steam Import | `OpenExternal`, `CopyText`, `SteamImport` (API fetch, HTML spec parsing, image download) | M1 | DONE |
-| M3 | Frontend Vanilla Integration | `wails-bridge.js`, `index.html`, `app.js` fixes, asset paths, UI event binding | M1, M2 | IN_PROGRESS |
-| M4 | Portable Build & Cleanup | `wails build` < 15MB, prune `main.js`/`preload.js`/`dist/`, update `package.json` & `README.md` | M3 | PLANNED |
+| M3 | Frontend Vanilla Integration | `wails-bridge.js`, `index.html`, `app.js` fixes, asset paths, UI event binding | M1, M2 | DONE |
+| M4 | Portable Build & Cleanup | `wails build` < 15MB, prune `main.js`/`preload.js`/`dist/`, update `package.json` & `README.md` | M3 | IN_PROGRESS |
 | M5 | Final E2E Pass & Hardening | 100% E2E test pass (Phase 1) + Adversarial hardening Tier 5 (Phase 2) + Forensic Audit | E2E, M4 | PLANNED |
 
 ---

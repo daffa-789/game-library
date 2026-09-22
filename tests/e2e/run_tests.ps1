@@ -71,7 +71,7 @@ foreach ($t in $tiersToRun) {
         1 {
             $t1Path = Join-Path $ScriptDir "tier1_features.ps1"
             if (Test-Path $t1Path) {
-                & $t1Path -VerboseOutput:$VerboseOutput
+                . $t1Path -VerboseOutput:$VerboseOutput
             } else {
                 Write-Warning "tier1_features.ps1 not found"
             }
@@ -79,7 +79,7 @@ foreach ($t in $tiersToRun) {
         2 {
             $t2Path = Join-Path $ScriptDir "tier2_boundaries.ps1"
             if (Test-Path $t2Path) {
-                & $t2Path -VerboseOutput:$VerboseOutput
+                . $t2Path -VerboseOutput:$VerboseOutput
             } else {
                 Write-Warning "tier2_boundaries.ps1 not found"
             }
@@ -87,7 +87,7 @@ foreach ($t in $tiersToRun) {
         3 {
             $t3Path = Join-Path $ScriptDir "tier3_combinations.ps1"
             if (Test-Path $t3Path) {
-                & $t3Path -VerboseOutput:$VerboseOutput
+                . $t3Path -VerboseOutput:$VerboseOutput
             } else {
                 Write-Warning "tier3_combinations.ps1 not found"
             }
@@ -95,7 +95,7 @@ foreach ($t in $tiersToRun) {
         4 {
             $t4Path = Join-Path $ScriptDir "tier4_scenarios.ps1"
             if (Test-Path $t4Path) {
-                & $t4Path -VerboseOutput:$VerboseOutput
+                . $t4Path -VerboseOutput:$VerboseOutput
             } else {
                 Write-Warning "tier4_scenarios.ps1 not found"
             }
@@ -108,21 +108,21 @@ $masterSw.Stop()
 # ----------------------------------------------------------------------------
 # Process and Summarize Results
 # ----------------------------------------------------------------------------
-$allResults = Get-TestResults
+$allResults = @(Get-TestResults | Where-Object { $null -ne $_ })
 
 if ($Filter) {
-    $allResults = $allResults | Where-Object { $_.Id -match $Filter -or $_.Name -match $Filter }
+    $allResults = @($allResults | Where-Object { $_.Id -match $Filter -or $_.Name -match $Filter })
 }
 
-$tier1Results = $allResults | Where-Object { $_.Tier -eq "1" }
-$tier2Results = $allResults | Where-Object { $_.Tier -eq "2" }
-$tier3Results = $allResults | Where-Object { $_.Tier -eq "3" }
-$tier4Results = $allResults | Where-Object { $_.Tier -eq "4" }
+$tier1Results = @($allResults | Where-Object { $_.Tier -eq "1" })
+$tier2Results = @($allResults | Where-Object { $_.Tier -eq "2" })
+$tier3Results = @($allResults | Where-Object { $_.Tier -eq "3" })
+$tier4Results = @($allResults | Where-Object { $_.Tier -eq "4" })
 
 $totalCount   = $allResults.Count
-$passedCount  = ($allResults | Where-Object { $_.Passed }).Count
-$failedCount  = ($allResults | Where-Object { -not $_.Passed -and -not $_.Skipped }).Count
-$skippedCount = ($allResults | Where-Object { $_.Skipped }).Count
+$passedCount  = @($allResults | Where-Object { $_.Passed }).Count
+$failedCount  = @($allResults | Where-Object { -not $_.Passed -and -not $_.Skipped }).Count
+$skippedCount = @($allResults | Where-Object { $_.Skipped }).Count
 
 Write-Host "`n================================================================================" -ForegroundColor DarkCyan
 Write-Host "                           TEST EXECUTION SUMMARY" -ForegroundColor DarkCyan
@@ -132,14 +132,16 @@ Write-Host ("{0,-35} | {1,8} | {2,8} | {3,8} | {4,8}" -f "Test Suite Tier", "Tot
 Write-Host ("-" * 75) -ForegroundColor DarkGray
 
 function Format-TierRow($name, $list) {
-    $tot = @($list).Count
+    $items = @($list | Where-Object { $null -ne $_ })
+    $tot = $items.Count
     if ($tot -eq 0) { return }
-    $p = @($list | Where-Object { $_.Passed }).Count
-    $f = @($list | Where-Object { -not $_.Passed -and -not $_.Skipped }).Count
+    $p = @($items | Where-Object { $_.Passed }).Count
+    $f = @($items | Where-Object { -not $_.Passed -and -not $_.Skipped }).Count
     $pct = if ($tot -gt 0) { [math]::Round(($p / $tot) * 100, 1) } else { 0 }
     $color = if ($f -eq 0) { "Green" } else { "Yellow" }
     Write-Host ("{0,-35} | {1,8} | {2,8} | {3,8} | {4,7}%" -f $name, $tot, $p, $f, $pct) -ForegroundColor $color
 }
+
 
 Format-TierRow "Tier 1: Feature Coverage" $tier1Results
 Format-TierRow "Tier 2: Boundary & Corner Cases" $tier2Results

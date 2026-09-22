@@ -3,6 +3,7 @@ dist/
 build/bin/
 .agents/
 *.log
+*.tmp*
 .DS_Store
 Thumbs.db
 .zcode/
