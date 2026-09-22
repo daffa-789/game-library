@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "libray-game",
+  "outputfilename": "GameLibrary",
+  "frontend:dir": "renderer",
+  "wailsjsdir": "./renderer",
+  "version": "2",
+  "author": {
+    "name": "Daffa",
+    "email": "ghazalahramadhan6@gmail.com"
+  },
+  "info": {
+    "companyName": "Daffa",
+    "productName": "Game Library",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2026 Daffa",
+    "comments": "Katalog game digital portabel mandiri"
+  }
+}

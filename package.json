@@ -7,6 +7,8 @@
   "license": "MIT",
   "author": "Daffa",
   "scripts": {
+    "dev": "wails dev",
+    "build": "wails build -clean -ldflags \"-s -w\" -trimpath",
     "start": "electron .",
     "make-icon": "electron . --make-icon",
     "dist": "electron-builder --win"

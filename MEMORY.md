@@ -19,18 +19,17 @@ spesifikasi pelanggan → **Copy Link** Google Drive → kirim ke pelanggan.
 
 | Komponen | Teknologi |
 |---|---|
-| Framework desktop | **Electron** (versi terbaru via npm, Node ≥ 18 punya `fetch` global) |
-| UI | Vanilla HTML/CSS/JS — **tanpa build step, tanpa framework** |
-| Penyimpanan | File JSON di AppData (bukan SQL — disengaja agar simpel & portabel) |
-| Build installer | electron-builder (target: nsis + portable) |
-| Node di mesin dev | v24.18.0 |
+| Framework desktop | **Wails v2 (v2.16.0)** (Go 1.27 + Microsoft WebView2 bawaan Windows) |
+| UI | Vanilla HTML/CSS/JS — **tanpa build step, tanpa framework**, tema Steam |
+| Penyimpanan | File JSON di AppData: `%APPDATA%\libray-game\library.json` |
+| Build executable | `wails build -clean -ldflags "-s -w" -trimpath` → single file `build/bin/GameLibrary.exe` (~11.4 MB) |
+| Go / Node di dev | Go 1.27.1 / Node v24.18.0 |
 
 Perintah:
 ```bash
-npm install        # sekali saja
-npm start          # jalankan app (development)
-npm run dist       # build installer ke folder dist/
-npm run make-icon  # regenerasi assets/icon.ico dari assets/logo.svg
+wails dev           # jalankan mode development
+wails build         # kompilasi binary mandiri ke build/bin/GameLibrary.exe
+go test -v ./...    # jalankan unit test Go backend
 ```
 
 ## 3. Struktur Proyek

@@ -371,7 +371,7 @@ async function saveGameFromForm() {
 
   const old = state.editingId ? getGame(state.editingId) : null;
   const thumb = state.pendingThumb || '';
-  if (old && old.thumbnail && old.thumbnail.startsWith('glib://') && old.thumbnail !== thumb) {
+  if (old && old.thumbnail && (old.thumbnail.startsWith('/thumbnails/') || old.thumbnail.startsWith('glib://')) && old.thumbnail !== thumb) {
     window.api.deleteThumbnail(old.thumbnail);
   }
 
@@ -415,7 +415,7 @@ function askDeleteGame(id) {
   if (!g) return;
   $('#confirm-msg').textContent = `"${g.title}" akan dihapus dari library beserta link dan spesifikasinya. Tindakan ini tidak bisa dibatalkan.`;
   state.confirmAction = async () => {
-    if (g.thumbnail && g.thumbnail.startsWith('glib://')) {
+    if (g.thumbnail && (g.thumbnail.startsWith('/thumbnails/') || g.thumbnail.startsWith('glib://'))) {
       window.api.deleteThumbnail(g.thumbnail);
     }
     state.games = state.games.filter((x) => x.id !== id);
@@ -543,7 +543,6 @@ function bindEvents() {
       const ref = await window.api.pickThumbnail();
       if (ref) {
         state.pendingThumb = ref;
-        $('#f-thumburl').value = '';
         updateThumbPreview();
       }
     } catch (err) {
