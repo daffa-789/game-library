@@ -334,6 +334,7 @@ function openForm(game, prefill) {
   if (!game && prefill) {
     if (prefill.title) $('#f-title').value = prefill.title;
     if (prefill.genre) $('#f-genre').value = prefill.genre;
+    if (prefill.price) $('#f-price').value = prefill.price;
     if (prefill.thumbnail) {
       state.pendingThumb = prefill.thumbnail;
     }

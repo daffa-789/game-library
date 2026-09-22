@@ -306,6 +306,7 @@ ipcMain.handle('steam:import', async (e, url) => {
     genre: (data.genres || []).map((g) => g.description).join(', '),
     developer: (data.developers || []).join(', '),
     releaseDate: (data.release_date && data.release_date.date) || '',
+    price: (data.price_overview && data.price_overview.final_formatted) || '',
     specs,
   };
 });
