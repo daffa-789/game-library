@@ -224,7 +224,9 @@ input, select { font-family: inherit; }
 }
 
 .card { cursor: pointer; min-width: 0; }
-
+/* Library bisa berisi ribuan kartu. content-visibility membuat browser melewatkan
+   layout & paint kartu di luar layar, jadi scroll tetap mulus. */
+.card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
 .capsule {
   position: relative;
   border-radius: 4px;

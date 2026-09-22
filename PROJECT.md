@@ -1,17 +1,24 @@
 # Project: Game Library Migration (Electron to Wails v2)
 
 ## Architecture
-- **Backend**: Go 1.23+ with Wails v2.16.0 framework.
+- **Backend**: Go 1.25+ with Wails v2.16.0 framework, split into focused files in `package main`:
   - `main.go`: Entry point, Wails options, single instance lock (`com.daffa.libraygame`), window sizing (1400x880, min 980x620), dark theme background `#171a21`, asset server configuration with dynamic thumbnail fallback handler.
-  - `app.go`: Application struct `App`, lifecycle (`startup`, `RestoreWindow`), and 7 API methods exposed to frontend (`LoadLibrary`, `SaveLibrary`, `PickThumbnail`, `DeleteThumbnail`, `OpenExternal`, `CopyText`, `SteamImport`).
+  - `app.go`: Data models, `App` struct, lifecycle (`startup`, `RestoreWindow`), shared `*http.Client` with connection pooling, guard-rail constants (max games, max file/thumbnail bytes, timeouts), image extension whitelist.
+  - `library.go`: `LoadLibrary` / `SaveLibrary`, atomic write with retry, corrupt-file quarantine, in-memory parse cache keyed by file fingerprint, sample data.
+  - `thumbnails.go`: AssetServer handler, `PickThumbnail`, `DeleteThumbnail`, and the single `safeThumbPath` validation gateway.
+  - `steam.go`: `SteamImport`, header image download (host + size + content-type validated), `<li>`/`<h4>` system requirement parsing, rune-safe truncation.
+  - `sanitize.go`: Field sanitisation with named length limits, UUID v4 generation.
+  - `system.go`: `OpenExternal` (url.Parse scheme/host validation) and `CopyText`.
 - **Data Persistence**:
-  - `%APPDATA%\libray-game\library.json`: JSON database of games with atomic write (`.tmp` + `os.Rename`) and corrupted file backup (`.rusak-<timestamp>`).
+  - `%APPDATA%\libray-game\library.json`: JSON database of games with atomic write (`.tmp` + rename) and corrupted file backup (`.rusak-<timestamp>`).
   - `%APPDATA%\libray-game\thumbnails\`: Local directory for stored thumbnails, served dynamically to WebView2 via `AssetServer.Handler` on path `/thumbnails/*`.
 - **Frontend**: Vanilla HTML5/CSS3/ES6 in `renderer/` (no bundler or npm dependencies).
   - `wails-bridge.js`: Shim mapping `window.api.*` calls to `window.go.main.App.*`.
-  - `styles.css`: Steam dark theme, Epic Games grid layout, responsive design.
-  - `app.js`: State management, search, sort, modals, game CRUD, thumbnail preview.
-- **Packaging**: Portable Windows x64 executable compiled via `wails build -clean -ldflags "-s -w" -trimpath` to `build/bin/GameLibrary.exe` (< 15 MB).
+  - `styles.css`: Steam dark theme, Epic Games grid layout, responsive design, `content-visibility: auto` cards.
+  - `app.js`: State management, search, sort, modals, game CRUD, thumbnail preview. Grid uses keyed reconciliation plus an element pool (cards are reused, not rebuilt), a cached lowercase search index, rAF-coalesced renders with a timeout fallback, and delegated events.
+- **Packaging**:
+  - Portable: `wails build -clean -trimpath -ldflags "-s -w"` → `build/bin/GameLibrary.exe` (~11.4 MB).
+  - Installer: `wails build ... -nsis -installscope user` → `build/bin/GameLibrary-Setup-<version>-amd64.exe` (~5.3 MB), scripted by `build/windows/installer/project.nsi` (Indonesian wizard, per-user scope, WebView2 bootstrapper, LZMA, catalog preserved on uninstall).
 
 ---
 
@@ -42,6 +49,12 @@
 | 22 | Project Documentation Update | Updating `README.md` with Wails v2 build, run, and dev instructions | M4 | ORIGINAL_REQUEST §R3 |
 | 23 | E2E Test Suite Validation | 100% pass across all 4 tiers of opaque-box E2E tests | M5 | Acceptance Criteria |
 | 24 | Adversarial Hardening (Tier 5) | White-box edge case testing and robustness verification | M5 | Acceptance Criteria |
+| 25 | Backend Module Split | `app.go` divided into `app.go`/`library.go`/`thumbnails.go`/`steam.go`/`sanitize.go`/`system.go` with unchanged `window.api` contract | M6 | Optimisation pass |
+| 26 | Path & Input Hardening | Single `safeThumbPath` gateway, image extension whitelist, size caps, trusted Steam image hosts, SVG sandbox headers, rune-safe truncation | M6 | Optimisation pass |
+| 27 | Library Parse Cache | mtime+size fingerprint cache, batched timestamps, encoder-based JSON writes | M6 | Optimisation pass |
+| 28 | Frontend Render Optimisation | Keyed grid reconciliation + element pool, cached search index, rAF-coalesced render with timeout fallback, delegated detail events, `content-visibility` cards | M6 | Optimisation pass |
+| 29 | Windows Installer (NSIS) | `GameLibrary-Setup-<ver>-amd64.exe`: Indonesian wizard, per-user scope, WebView2 bootstrapper, LZMA, catalog preserved on uninstall | M6 | ORIGINAL_REQUEST (installer exe) |
+| 30 | Build Script Surface | `npm run dev/test/build/installer` with `-trimpath -ldflags "-s -w"` | M6 | ORIGINAL_REQUEST (installer exe) |
 
 ---
 
@@ -49,12 +62,13 @@
 
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| E2E | E2E Testing Track | Independent opaque-box test runner & suites (Tiers 1-4) published via `TEST_READY.md` | none | IN_PROGRESS |
+| E2E | E2E Testing Track | Independent opaque-box test runner & suites (Tiers 1-4) published via `TEST_READY.md` | none | DONE |
 | M1 | Backend Core & Persistence | `wails.json`, `go.mod`, `main.go`, `app.go` (`LoadLibrary`, `SaveLibrary`, `PickThumbnail`, `DeleteThumbnail`, `AssetServer.Handler`) | none | DONE |
 | M2 | Utilities & Steam Import | `OpenExternal`, `CopyText`, `SteamImport` (API fetch, HTML spec parsing, image download) | M1 | DONE |
 | M3 | Frontend Vanilla Integration | `wails-bridge.js`, `index.html`, `app.js` fixes, asset paths, UI event binding | M1, M2 | DONE |
-| M4 | Portable Build & Cleanup | `wails build` < 15MB, prune `main.js`/`preload.js`/`dist/`, update `package.json` & `README.md` | M3 | IN_PROGRESS |
-| M5 | Final E2E Pass & Hardening | 100% E2E test pass (Phase 1) + Adversarial hardening Tier 5 (Phase 2) + Forensic Audit | E2E, M4 | PLANNED |
+| M4 | Portable Build & Cleanup | `wails build` < 15MB, prune `main.js`/`preload.js`/`dist/`, update `package.json` & `README.md` | M3 | DONE |
+| M5 | Final E2E Pass & Hardening | 100% E2E test pass (Phase 1) + Adversarial hardening Tier 5 (Phase 2) + Forensic Audit | E2E, M4 | DONE |
+| M6 | Optimisation & Installer | Backend module split, path/input hardening, parse cache, keyed grid rendering, NSIS per-user installer + build scripts | M5 | DONE |
 
 ---
 
@@ -126,32 +140,40 @@ interface BackendAPI {
 ## Code Layout
 ```
 c:\Users\Daffa\Desktop\Libray Game\
-├── go.mod
-├── go.sum
+├── go.mod / go.sum
 ├── wails.json
-├── main.go
-├── app.go
+├── package.json                 # npm run dev | test | build | installer
+├── main.go                      # Wails bootstrap & options
+├── app.go                       # Models, App struct, lifecycle, HTTP client, limits
+├── library.go                   # Persistence: load/save, atomic write, parse cache
+├── thumbnails.go                # Asset handler, picker, deletion, safeThumbPath
+├── steam.go                     # Steam import, image download, sysreq parsing
+├── sanitize.go                  # Field sanitisation, UUID v4, rune-safe truncation
+├── system.go                    # OpenExternal, CopyText
+├── app_test.go                  # Unit tests (9)
+├── app_stress_test.go           # Stress/concurrency tests (12)
+├── boundary_adversarial_test.go # Adversarial white-box tests (7)
+├── hardening_test.go            # Refactor proof tests (10)
 ├── build/
 │   ├── appicon.png
-│   ├── bin/
-│   │   └── GameLibrary.exe
+│   ├── bin/                     # GameLibrary.exe, GameLibrary-Setup-<ver>-amd64.exe
 │   └── windows/
 │       ├── icon.ico
 │       ├── info.json
-│       └── wails.exe.manifest
+│       ├── wails.exe.manifest
+│       └── installer/
+│           ├── project.nsi      # Installer script (customise here)
+│           ├── wails_tools.nsh  # Regenerated by Wails; do not edit
+│           └── resources/       # sidebar.bmp + header.bmp (generated)
+├── tools/
+│   └── gen-installer-images/    # NSIS wizard artwork generator (stdlib only)
 ├── renderer/
 │   ├── index.html
 │   ├── styles.css
 │   ├── app.js
 │   ├── wails-bridge.js
-│   └── assets/
-│       └── logo.svg
-├── tests/
-│   └── e2e/
-│       ├── test_runner.ps1 (or .go)
-│       ├── tier1_features/
-│       ├── tier2_boundaries/
-│       ├── tier3_combinations/
-│       └── tier4_scenarios/
-└── README.md
+│   └── assets/logo.svg
+└── tests/
+    ├── e2e/                     # Tiers 1-4 (161 assertions), test_utils.ps1
+    └── stress/                  # Load & resilience runners
 ```

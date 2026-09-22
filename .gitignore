@@ -7,3 +7,7 @@ build/bin/
 .DS_Store
 Thumbs.db
 .zcode/
+
+# Artefak build: jangan ikut ter-commit
+*.exe
+build/windows/installer/tmp/

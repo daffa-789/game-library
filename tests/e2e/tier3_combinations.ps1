@@ -77,7 +77,7 @@ Invoke-TestCase -Id "T3.2" -Tier "3" -Feature "F4+F5" -Name "SaveLibrary under c
     $sb = New-TestSandbox
     try {
         # App struct has sync.Mutex protecting LoadLibrary and SaveLibrary
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "a\.mu\.Lock\(\)" $appGo "SaveLibrary must acquire mutex lock"
         Assert-Matches "defer a\.mu\.Unlock\(\)" $appGo "SaveLibrary must defer mutex unlock"
         Assert-Matches "tmpFile := fmt\.Sprintf\(" $appGo "Atomic temporary file pattern must be used"
@@ -151,10 +151,10 @@ Invoke-TestCase -Id "T3.4" -Tier "3" -Feature "F6+F7" -Name "Thumbnail Import fo
 
 # T3.5: [F8 + F6] Steam Import + Thumbnail Pipeline
 Invoke-TestCase -Id "T3.5" -Tier "3" -Feature "F8+F6" -Name "SteamImport downloads header image into Thumbnails directory" -ScriptBlock {
-    $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-    Assert-Matches 'fileName := fmt\.Sprintf\("steam-%s-%s%s"' $appGo "Steam image must follow steam-<appid>-<hex> naming"
-    Assert-Matches 'destPath := filepath\.Join\(a\.thumbsDir,\s*fileName\)' $appGo "Steam image must be saved in thumbsDir"
-    Assert-Matches 'return "/thumbnails/" \+ fileName' $appGo "Steam thumbnail return value must use /thumbnails/ URL format"
+    $appGo = Get-GoSource $ProjectRoot
+    Assert-Matches 'fmt\.Sprintf\("steam-%s-%s", appID,' $appGo "Steam image must follow steam-<appid>-<hex> naming"
+    Assert-Matches 'filepath\.Join\(a\.thumbsDir, fmt\.Sprintf\(' $appGo "Steam image must be saved in thumbsDir"
+    Assert-Matches 'return thumbURLPrefix \+ filepath\.Base\(dest\)' $appGo "Steam thumbnail return value must use /thumbnails/ URL format"
 }
 
 
@@ -312,9 +312,9 @@ Invoke-TestCase -Id "T3.13" -Tier "3" -Feature "F1+F2" -Name "wails.json configu
 
 # T3.14: [F13 + F14] Game CRUD Independent of Electron Runtime
 Invoke-TestCase -Id "T3.14" -Tier "3" -Feature "F13+F14" -Name "Game CRUD operations function entirely without Electron" -ScriptBlock {
-    $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-    Assert-False ($appGo.Contains("electron")) "app.go must not contain any reference to Electron"
-    Assert-Matches "package main" $appGo "app.go must be standard Go main package"
+    $appGo = Get-GoSource $ProjectRoot
+    Assert-False ($appGo.Contains("electron")) "Go backend must not contain any reference to Electron"
+    Assert-Matches "package main" $appGo "Go backend must be standard Go main package"
 }
 
 Write-Host "`nTier 3 Combinations Completed.`n" -ForegroundColor Cyan

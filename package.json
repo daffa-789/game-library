@@ -7,6 +7,9 @@
   "author": "Daffa",
   "scripts": {
     "dev": "wails dev",
-    "build": "wails build -clean -ldflags \"-s -w\" -trimpath -o GameLibrary.exe"
+    "test": "go test ./...",
+    "assets:installer": "go run ./tools/gen-installer-images",
+    "build": "wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o GameLibrary.exe",
+    "installer": "go run ./tools/gen-installer-images && wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o GameLibrary.exe -nsis -installscope user"
   }
 }

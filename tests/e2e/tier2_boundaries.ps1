@@ -134,7 +134,7 @@ if ($Feature -eq 0 -or $Feature -eq 3) {
             [System.IO.File]::WriteAllBytes($sb.DataFile, @())
             Assert-True ((Get-Item $sb.DataFile).Length -eq 0) "File must be 0 bytes"
             # Reading 0-byte file in Go returns unmarshal error and triggers backup or empty
-            $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+            $appGo = Get-GoSource $ProjectRoot
             Assert-Matches "if err := json\.Unmarshal" $appGo "Unmarshal error must be handled"
         }
         finally {
@@ -147,8 +147,8 @@ if ($Feature -eq 0 -or $Feature -eq 3) {
         try {
             Set-Content -Path $sb.DataFile -Value '{"games": null}' -Encoding UTF8
             $json = Assert-JsonValid (Get-Content $sb.DataFile -Raw)
-            $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-            Assert-Matches "if fileData\.Games == nil" $appGo "app.go must normalize nil games slice to empty"
+            $appGo = Get-GoSource $ProjectRoot
+            Assert-Matches "if games == nil \{" $appGo "Go backend must normalize nil games slice to empty"
         }
         finally {
             Remove-TestSandbox $sb.Root
@@ -198,19 +198,19 @@ if ($Feature -eq 0 -or $Feature -eq 4) {
     Write-Host "`n--- Feature 4 Boundaries: Data Saving Boundaries ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T2.4.1" -Tier "2" -Feature "F4" -Name "SaveLibrary caps maximum game count at 5,000 items" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "if len\(games\) > 5000 \{" $appGo "SaveLibrary must cap games slice at 5000"
-        Assert-Matches "games = games\[:5000\]" $appGo "Slice must be capped to [:5000]"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "if len\(games\) > maxGames \{" $appGo "SaveLibrary must cap games slice at 5000"
+        Assert-Matches "games = games\[:maxGames\]" $appGo "Slice must be capped to [:5000]"
     }
 
     Invoke-TestCase -Id "T2.4.2" -Tier "2" -Feature "F4" -Name "SaveLibrary truncates game titles exceeding 200 characters" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "trim\(g\.Title,\s*200\)" $appGo "Title must be truncated to 200 chars"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "trim\(g\.Title,\s*maxLenTitle\)" $appGo "Title must be truncated to 200 chars"
     }
 
     Invoke-TestCase -Id "T2.4.3" -Tier "2" -Feature "F4" -Name "SaveLibrary truncates spec notes exceeding 400 characters" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "trim\(s\.Notes,\s*400\)" $appGo "Specs notes must be truncated to 400 chars"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "trim\(s\.Notes,\s*maxLenSpecField\)" $appGo "Specs notes must be truncated to 400 chars"
     }
 
     Invoke-TestCase -Id "T2.4.4" -Tier "2" -Feature "F4" -Name "SaveLibrary preserves special characters and quote escaping" -ScriptBlock {
@@ -241,7 +241,7 @@ if ($Feature -eq 0 -or $Feature -eq 5) {
     Write-Host "`n--- Feature 5 Boundaries: Persistence & Recovery ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T2.5.1" -Tier "2" -Feature "F5" -Name "Atomic temporary file uses nanosecond precision timestamp" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "time\.Now\(\)\.UnixNano\(\)" $appGo "tmpFile must use UnixNano() for conflict-free filenames"
     }
 
@@ -283,13 +283,13 @@ if ($Feature -eq 0 -or $Feature -eq 5) {
     }
 
     Invoke-TestCase -Id "T2.5.4" -Tier "2" -Feature "F5" -Name "Atomic save removes temp file if rename encounters error" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "_\s*=\s*os\.Remove\(tmpFile\)" $appGo "saveFileAtomic must clean up tmpFile on failure"
     }
 
     Invoke-TestCase -Id "T2.5.5" -Tier "2" -Feature "F5" -Name "Save creates parent directory automatically" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "os\.MkdirAll\(a\.dataDir,\s*0755\)" $appGo "saveFileAtomic must call MkdirAll on dataDir"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "os\.MkdirAll\(a\.dataDir,\s*0o755\)" $appGo "saveFileAtomic must call MkdirAll on dataDir"
     }
 }
 
@@ -300,29 +300,29 @@ if ($Feature -eq 0 -or $Feature -eq 6) {
     Write-Host "`n--- Feature 6 Boundaries: Thumbnail HTTP Handler Security ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T2.6.1" -Tier "2" -Feature "F6" -Name "Asset server blocks URL-encoded path traversal" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "filepath\.Clean\(targetPath\)" $appGo "Handler must clean filepath"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "filepath\.Clean\(target\)" $appGo "Handler must clean filepath"
         Assert-Matches "filepath\.Clean\(a\.thumbsDir\)" $appGo "Handler must check prefix against clean thumbsDir"
     }
 
     Invoke-TestCase -Id "T2.6.2" -Tier "2" -Feature "F6" -Name "Asset server blocks backslash path traversal" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'baseName == "\.\." \|\| baseName == "/" \|\| baseName == "\\\\"' $appGo "Handler must reject separator basenames"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'strings\.ContainsAny\(name,' $appGo "Handler must reject separator and control characters"
     }
 
     Invoke-TestCase -Id "T2.6.3" -Tier "2" -Feature "F6" -Name "Asset server returns 404 for directory requests" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "if err != nil \|\| fi\.IsDir\(\) \{" $appGo "Handler must return 404 on directories"
     }
 
     Invoke-TestCase -Id "T2.6.4" -Tier "2" -Feature "F6" -Name "Asset server supports SVG thumbnail serving" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'sample-gta\.svg' $appGo "Sample data must include SVG thumbnails"
-        Assert-Matches "http\.ServeFile\(w, r, targetPath\)" $appGo "ServeFile automatically detects SVG Content-Type"
+        Assert-Matches "http\.ServeFile\(w, r, target\)" $appGo "ServeFile automatically detects SVG Content-Type"
     }
 
     Invoke-TestCase -Id "T2.6.5" -Tier "2" -Feature "F6" -Name "Asset server rejects non-GET HTTP methods with 405" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "!strings\.EqualFold\(r\.Method,\s*http\.MethodGet\)" $appGo "Handler must check for GET method"
         Assert-Matches "http\.StatusMethodNotAllowed" $appGo "Handler must return 405 MethodNotAllowed"
     }
@@ -335,23 +335,23 @@ if ($Feature -eq 0 -or $Feature -eq 7) {
     Write-Host "`n--- Feature 7 Boundaries: Thumbnail Deletion Edge Cases ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T2.7.1" -Tier "2" -Feature "F7" -Name "DeleteThumbnail rejects traversal attempting to delete external files" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "strings\.HasPrefix\(filepath\.Clean\(targetPath\),\s*cleanThumbs\)" $appGo "DeleteThumbnail must enforce directory prefix"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "filepath\.Rel\(cleanDir,\s*filepath\.Clean\(target\)\)" $appGo "DeleteThumbnail must enforce directory prefix"
     }
 
     Invoke-TestCase -Id "T2.7.2" -Tier "2" -Feature "F7" -Name "DeleteThumbnail ignores empty or whitespace string without error" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'if name == "" \|\| name == "\."' $appGo "DeleteThumbnail must return nil on empty name"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'if name == "" \|\| len\(name\) > 200' $appGo "DeleteThumbnail must return nil on empty name"
     }
 
     Invoke-TestCase -Id "T2.7.3" -Tier "2" -Feature "F7" -Name "DeleteThumbnail with single dot or double dot is rejected" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'name == "\.\."' $appGo "DeleteThumbnail must reject '..'"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'strings\.HasPrefix\(name,' $appGo "DeleteThumbnail must reject dot names"
     }
 
     Invoke-TestCase -Id "T2.7.4" -Tier "2" -Feature "F7" -Name "DeleteThumbnail targeting directory does not delete the directory" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "if err == nil && !fi\.IsDir\(\)" $appGo "DeleteThumbnail must check !fi.IsDir()"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "if err != nil \|\| fi\.IsDir\(\)" $appGo "DeleteThumbnail must check !fi.IsDir()"
     }
 
     Invoke-TestCase -Id "T2.7.5" -Tier "2" -Feature "F7" -Name "Consecutive deletes of same thumbnail succeed idempotently" -ScriptBlock {
@@ -387,27 +387,27 @@ if ($Feature -eq 0 -or $Feature -eq 8) {
     Write-Host "`n--- Feature 8 Boundaries: Steam Import Edge Cases ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T2.8.1" -Tier "2" -Feature "F8" -Name "SteamImport rejects invalid Steam store URLs" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'Link tidak dikenali' $appGo "SteamImport must return descriptive error for invalid URL"
     }
 
     Invoke-TestCase -Id "T2.8.2" -Tier "2" -Feature "F8" -Name "SteamImport handles non-existent Steam AppID with clear error" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'Data game tidak ditemukan di Steam' $appGo "SteamImport must return error when Steam game is not found"
     }
 
     Invoke-TestCase -Id "T2.8.3" -Tier "2" -Feature "F8" -Name "SteamImport handles game with empty PC requirements array" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "pcReqsTrimmed\[0\] == '\{'" $appGo "app.go must check that pc_requirements is a JSON object, not []"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "trimmed\[0\] == '\{'" $appGo "Go backend must check that pc_requirements is a JSON object, not []"
     }
 
     Invoke-TestCase -Id "T2.8.4" -Tier "2" -Feature "F8" -Name "SteamImport handles free-to-play games missing price_overview" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "Price:\s*detail\.PriceOverview\.FinalFormatted" $appGo "FinalFormatted defaults to empty string if missing"
     }
 
     Invoke-TestCase -Id "T2.8.5" -Tier "2" -Feature "F8" -Name "SteamImport strips nested HTML tags and unescapes entities" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'steamTagRe\.ReplaceAllString\(s,\s*""\)' $appGo "htmlToText must strip HTML tags"
         Assert-Matches 'html\.UnescapeString\(s\)' $appGo "htmlToText must unescape HTML entities"
     }
@@ -421,22 +421,22 @@ if ($Feature -eq 0 -or $Feature -eq 9) {
     Write-Host "`n--- Feature 9 Boundaries: OS Integration Security ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T2.9.1" -Tier "2" -Feature "F9" -Name "OpenExternal rejects command injection payloads in URL" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'strings\.HasPrefix\(strings\.ToLower\(trimmed\),\s*"http://"\)' $appGo "OpenExternal strictly checks http:// or https:// prefix"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'parsed, err := url\.Parse\(trimmed\)' $appGo "OpenExternal strictly checks http:// or https:// prefix"
     }
 
     Invoke-TestCase -Id "T2.9.2" -Tier "2" -Feature "F9" -Name "OpenExternal rejects scheme-less URLs (e.g. www.google.com)" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'URL tidak valid' $appGo "Scheme-less URL must return 'URL tidak valid'"
     }
 
     Invoke-TestCase -Id "T2.9.3" -Tier "2" -Feature "F9" -Name "CopyText handles empty string without crash" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "func \(a \*App\) CopyText\(text string\) error" $appGo "CopyText accepts any string"
     }
 
     Invoke-TestCase -Id "T2.9.4" -Tier "2" -Feature "F9" -Name "CopyText handles large text payload (> 100 KB) without error" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "runtime\.ClipboardSetText" $appGo "CopyText delegates directly to Wails runtime"
     }
 

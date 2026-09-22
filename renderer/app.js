@@ -2,6 +2,14 @@
 
 /* ==========================================================================
    Game Library — logika UI (grid, pencarian, form, detail)
+
+   Catatan performa (hasil perombakan):
+   - Grid dirender ulang secara inkremental (keyed reconciliation): kartu yang
+     sudah ada dipakai kembali, jadi gambar tidak di-decode ulang dan halaman
+     tidak berkedip setiap kali user mengetik di kotak pencarian.
+   - Pencarian memakai indeks haystack lower-case yang di-cache per game.
+   - Render dikumpulkan (coalesce) per animation frame, maksimal 1x/frame.
+   - Detail view memakai event delegation, jadi listener tidak menumpuk.
    ========================================================================== */
 
 const SPEC_FIELDS = [
@@ -26,6 +34,7 @@ const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
 
 const COPY_ICON = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
 const LINK_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
+const TRASH_ICON = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 
 const state = {
   games: [],
@@ -57,95 +66,259 @@ function toast(msg, isError) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
+// Index id -> game, dibuat ulang hanya saat isi library berubah (getGame O(1)).
+let gameIndex = new Map();
+function reindexGames() {
+  gameIndex = new Map(state.games.map((g) => [g.id, g]));
+}
+
 function getGame(id) {
-  return state.games.find((g) => g.id === id) || null;
+  return gameIndex.get(id) || null;
 }
 
 async function persist() {
   try {
     await window.api.saveLibrary(state.games);
   } catch (err) {
-    toast('Gagal menyimpan data: ' + err.message, true);
+    toast('Gagal menyimpan data: ' + (err && err.message ? err.message : err), true);
   }
 }
 
+function setGames(games) {
+  state.games = Array.isArray(games) ? games : [];
+  reindexGames();
+}
+
 /* ==========================================================================
-   Grid library
+   Grid library — render inkremental
    ========================================================================== */
 
-function sortedGames() {
+// haystack pencarian yang di-cache: key = "title\0genre"
+const hayCache = new Map();
+function haystack(g) {
+  const key = (g.title || '') + '\u0000' + (g.genre || '');
+  const hit = hayCache.get(g.id);
+  if (hit && hit.k === key) return hit.h;
+  const h = key.toLowerCase();
+  hayCache.set(g.id, { k: key, h });
+  return h;
+}
+
+function visibleGames() {
   const q = state.query.trim().toLowerCase();
-  let list = state.games.filter((g) => {
-    if (!q) return true;
-    return (
-      (g.title || '').toLowerCase().includes(q) ||
-      (g.genre || '').toLowerCase().includes(q)
-    );
-  });
-  if (state.sort === 'az') {
-    list = [...list].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'id'));
-  } else if (state.sort === 'za') {
-    list = [...list].sort((a, b) => (b.title || '').localeCompare(a.title || '', 'id'));
+  let list = state.games;
+  if (q) list = list.filter((g) => haystack(g).includes(q));
+
+  const sort = state.sort;
+  if (sort === 'az' || sort === 'za') {
+    const dir = sort === 'az' ? 1 : -1;
+    list = [...list].sort((a, b) =>
+      dir * String(a.title || '').localeCompare(String(b.title || ''), 'id'));
   } else {
-    list = [...list].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    list = [...list].sort((a, b) =>
+      String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   }
   return list;
 }
 
-function cardHtml(g) {
+// Cetakan kartu dibuat sekali di DOM (tanpa parsing HTML per kartu).
+let cardTemplate = null;
+function cardNode() {
+  if (!cardTemplate) {
+    cardTemplate = document.createElement('div');
+    cardTemplate.className = 'card';
+    cardTemplate.innerHTML =
+      '<div class="capsule">' +
+      '<img loading="lazy" decoding="async" alt="">' +
+      '<div class="cap-overlay"><div class="cap-actions">' +
+      `<button class="btn-copy">${COPY_ICON} Copy Link</button>` +
+      `<button class="btn-card-del" title="Hapus game">${TRASH_ICON}</button>` +
+      '</div></div></div>' +
+      '<div class="card-title"></div>' +
+      '<div class="card-sub"></div>';
+  }
+  const el = cardTemplate.cloneNode(true);
+  return {
+    el,
+    img: el.querySelector('img'),
+    copy: el.querySelector('.btn-copy'),
+    del: el.querySelector('.btn-card-del'),
+    title: el.querySelector('.card-title'),
+    sub: el.querySelector('.card-sub'),
+  };
+}
+
+// Signature isi kartu: kalau sama, DOM tidak disentuh sama sekali.
+function cardSig(g) {
+  return (g.title || '') + '\u0001' + (g.genre || '') + '\u0001' + (g.size || '') +
+    '\u0001' + (g.thumbnail || '') + '\u0001' + (g.price || '');
+}
+
+// id -> { nodes, sig }
+const renderedCards = new Map();
+
+// Kartu yang keluar dari layar (karena filter) tidak dibuang, tapi masuk ke
+// kolam ini supaya pencarian berikutnya tinggal memakai ulang node, bukan
+// membuat 600 elemen baru lagi.
+const cardPool = [];
+const CARD_POOL_MAX = 800;
+
+function recycle(entry) {
+  entry.nodes.el.remove();
+  entry.nodes.img.removeAttribute('data-fallback');
+  if (cardPool.length < CARD_POOL_MAX) cardPool.push(entry.nodes);
+}
+
+function cardNode() {
+  const pooled = cardPool.pop();
+  if (pooled) {
+    pooled.el.removeAttribute('data-id');
+    return pooled;
+  }
+  if (!cardTemplate) {
+    cardTemplate = document.createElement('div');
+    cardTemplate.className = 'card';
+    cardTemplate.innerHTML =
+      '<div class="capsule">' +
+      '<img loading="lazy" decoding="async" alt="">' +
+      '<div class="cap-overlay"><div class="cap-actions">' +
+      `<button class="btn-copy">${COPY_ICON} Copy Link</button>` +
+      `<button class="btn-card-del" title="Hapus game">${TRASH_ICON}</button>` +
+      '</div></div></div>' +
+      '<div class="card-title"></div>' +
+      '<div class="card-sub"></div>';
+  }
+  const el = cardTemplate.cloneNode(true);
+  return {
+    el,
+    img: el.querySelector('img'),
+    copy: el.querySelector('.btn-copy'),
+    del: el.querySelector('.btn-card-del'),
+    title: el.querySelector('.card-title'),
+    sub: el.querySelector('.card-sub'),
+  };
+}
+
+function paintCard(entry, g) {
+  const { nodes } = entry;
+  const thumb = g.thumbnail || PLACEHOLDER_IMG;
+  if (nodes.img.getAttribute('src') !== thumb) {
+    delete nodes.img.dataset.fallback; // src baru: boleh jatuh ke placeholder lagi
+    nodes.img.src = thumb;
+  }
+  nodes.img.alt = g.title || '';
+  nodes.el.dataset.id = g.id;
+  nodes.copy.dataset.copy = g.id;
+  nodes.del.dataset.del = g.id;
+  nodes.title.textContent = g.title || '';
   const sub = [g.genre, g.size].filter(Boolean).join(' · ');
-  return `
-    <div class="card" data-id="${esc(g.id)}">
-      <div class="capsule">
-        <img loading="lazy" src="${esc(g.thumbnail || PLACEHOLDER_IMG)}" alt="${esc(g.title)}">
-        <div class="cap-overlay">
-          <div class="cap-actions">
-            <button class="btn-copy" data-copy="${esc(g.id)}" title="Salin link download">${COPY_ICON} Copy Link</button>
-            <button class="btn-card-del" data-del="${esc(g.id)}" title="Hapus game">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="card-title">${esc(g.title)}</div>
-      <div class="card-sub">${esc(sub)}</div>
-    </div>`;
+  nodes.sub.textContent = sub;
+}
+
+function syncGridHeader(list) {
+  const q = state.query.trim();
+  const title = (q ? `Hasil untuk “${q}”` : 'Semua Game') +
+    ` ${list.length} game`;
+  const el = $('#lib-title');
+  // Tulis sekali lewat textContent + span count agar #lib-count tetap ada.
+  if (el.dataset.cache === title) return;
+  el.dataset.cache = title;
+  el.replaceChildren(
+    document.createTextNode(q ? `Hasil untuk “${q}” ` : 'Semua Game '),
+    Object.assign(document.createElement('span'), { id: 'lib-count', textContent: `${list.length} game` }),
+  );
 }
 
 function renderGrid() {
-  const list = sortedGames();
   const grid = $('#grid');
   const empty = $('#empty');
+  const list = visibleGames();
 
-  // Judul + hitungan ditulis sekali supaya span#lib-count tidak hilang dari DOM
-  const q = state.query.trim();
-  $('#lib-title').innerHTML =
-    (q ? `Hasil untuk &ldquo;${esc(q)}&rdquo;` : 'Semua Game') +
-    ` <span id="lib-count">${list.length} game</span>`;
+  syncGridHeader(list);
 
-  if (!state.games.length) {
-    grid.innerHTML = '';
+  if (!state.games.length || !list.length) {
+    for (const entry of renderedCards.values()) recycle(entry);
+    grid.replaceChildren();
+    renderedCards.clear();
     grid.classList.add('hidden');
     empty.classList.remove('hidden');
-    $('#empty-title').textContent = 'Library masih kosong';
-    $('#empty-sub').textContent = 'Tambahkan game pertama Anda beserta link download dan spesifikasinya.';
-    $('#btn-empty-add').classList.remove('hidden');
-    return;
-  }
-
-  if (!list.length) {
-    grid.innerHTML = '';
-    grid.classList.add('hidden');
-    empty.classList.remove('hidden');
-    $('#empty-title').textContent = `Tidak ada hasil untuk "${state.query.trim()}"`;
-    $('#empty-sub').textContent = 'Coba kata kunci lain, atau periksa ejaan judul game.';
-    $('#btn-empty-add').classList.add('hidden');
+    if (!state.games.length) {
+      $('#empty-title').textContent = 'Library masih kosong';
+      $('#empty-sub').textContent = 'Tambahkan game pertama Anda beserta link download dan spesifikasinya.';
+      $('#btn-empty-add').classList.remove('hidden');
+    } else {
+      $('#empty-title').textContent = `Tidak ada hasil untuk "${state.query.trim()}"`;
+      $('#empty-sub').textContent = 'Coba kata kunci lain, atau periksa ejaan judul game.';
+      $('#btn-empty-add').classList.add('hidden');
+    }
     return;
   }
 
   empty.classList.add('hidden');
   grid.classList.remove('hidden');
-  grid.innerHTML = list.map(cardHtml).join('');
+
+  // 1. Buat / perbarui kartu yang isinya berubah.
+  const wanted = new Set();
+  for (const g of list) {
+    wanted.add(g.id);
+    let entry = renderedCards.get(g.id);
+    if (!entry) {
+      const nodes = cardNode();
+      entry = { nodes, sig: '' };
+      renderedCards.set(g.id, entry);
+    }
+    const sig = cardSig(g);
+    if (entry.sig !== sig) {
+      paintCard(entry, g);
+      entry.sig = sig;
+    }
+  }
+
+  // 2. Buang kartu yang tidak lagi terlihat (masuk ke kolam, bukan dihancurkan).
+  for (const [id, entry] of renderedCards) {
+    if (!wanted.has(id)) {
+      recycle(entry);
+      renderedCards.delete(id);
+    }
+  }
+
+  // 3. Susun ulang urutan dengan perpindahan minimum (insertBefore hanya bila
+  //    posisi sudah salah).
+  let ref = grid.firstChild;
+  for (const g of list) {
+    const el = renderedCards.get(g.id).nodes.el;
+    if (el !== ref) {
+      grid.insertBefore(el, ref || null);
+    } else {
+      ref = ref.nextSibling;
+      continue;
+    }
+    ref = el.nextSibling;
+  }
+
+  // 4. Setelah penyusunan, semua kartu aktif berada di depan; sisa simpul di
+  //    ekor yang bukan milik kita (mis. ditulis kode lain) dibuang.
+  let tail = grid.lastElementChild;
+  while (tail && !wanted.has(tail.dataset.id)) {
+    tail.remove();
+    tail = grid.lastElementChild;
+  }
+}
+
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  // requestAnimationFrame menggabungkan beberapa ketikan menjadi 1 render.
+  // setTimeout jadi jaring pengaman kalau rAF di-throttle (jendela di-minimize
+  // atau tidak terlihat), agar tampilan tidak pernah tertahan.
+  const fire = () => {
+    if (!renderQueued) return;
+    renderQueued = false;
+    renderGrid();
+  };
+  requestAnimationFrame(fire);
+  setTimeout(fire, 32);
 }
 
 async function copyGameLink(id) {
@@ -170,14 +343,35 @@ async function copyGameLink(id) {
 function reqRows(spec) {
   const rows = SPEC_FIELDS
     .filter(([key]) => (spec && spec[key] ? String(spec[key]).trim() : false))
-    .map(([key, label]) => `
-      <div class="req-row">
-        <span class="req-lbl">${esc(label)}:</span>
-        <span class="req-val">${esc(spec[key])}</span>
-      </div>`);
-  return rows.length
-    ? rows.join('')
-    : '<div class="req-empty">Belum diisi</div>';
+    .map(([key, label]) => {
+      const row = document.createElement('div');
+      row.className = 'req-row';
+      const lbl = document.createElement('span');
+      lbl.className = 'req-lbl';
+      lbl.textContent = `${label}:`;
+      const val = document.createElement('span');
+      val.className = 'req-val';
+      val.textContent = spec[key];
+      row.append(lbl, val);
+      return row;
+    });
+  if (!rows.length) {
+    const none = document.createElement('div');
+    none.className = 'req-empty';
+    none.textContent = 'Belum diisi';
+    return [none];
+  }
+  return rows;
+}
+
+function specColumn(headText, spec) {
+  const col = document.createElement('div');
+  col.className = 'req-col';
+  const head = document.createElement('div');
+  head.className = 'req-head';
+  head.textContent = headText;
+  col.append(head, ...reqRows(spec));
+  return col;
 }
 
 function renderDetail() {
@@ -186,75 +380,89 @@ function renderDetail() {
   if (!g) { showLibrary(); return; }
 
   const chips = [
-    g.genre ? `<span class="chip">${esc(g.genre)}</span>` : '',
-    g.size ? `<span class="chip">Ukuran: ${esc(g.size)}</span>` : '',
-    g.price ? `<span class="chip accent">${esc(g.price)}</span>` : '',
-  ].filter(Boolean).join('');
+    g.genre ? ['chip', g.genre] : null,
+    g.size ? ['chip', `Ukuran: ${g.size}`] : null,
+    g.price ? ['chip accent', g.price] : null,
+  ].filter(Boolean);
 
   const minSpec = g.specs && g.specs.min ? g.specs.min : null;
   const recSpec = g.specs && g.specs.rec ? g.specs.rec : null;
-  const hasAnySpec = SPEC_FIELDS.some(([k]) =>
-    (minSpec && minSpec[k]) || (recSpec && recSpec[k]));
+  const hasAnySpec = SPEC_FIELDS.some(([k]) => (minSpec && minSpec[k]) || (recSpec && recSpec[k]));
+  const thumb = g.thumbnail || PLACEHOLDER_IMG;
 
-  const sysreq = hasAnySpec ? `
-    <div class="sysreq">
-      <div class="req-col">
-        <div class="req-head">MINIMUM:</div>
-        ${reqRows(minSpec)}
-      </div>
-      <div class="req-col">
-        <div class="req-head">RECOMMENDED:</div>
-        ${reqRows(recSpec)}
-      </div>
-    </div>` : `
-    <div class="sysreq"><div class="req-all-empty">Spesifikasi sistem belum diisi untuk game ini. Klik Edit untuk menambahkan.</div></div>`;
+  const frag = document.createDocumentFragment();
 
-  view.innerHTML = `
-    <div class="detail-hero">
-      <div class="hero-bg" style="background-image:url('${esc(g.thumbnail || PLACEHOLDER_IMG)}')"></div>
-      <button class="btn ghost d-back" id="d-back">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        Kembali
-      </button>
-      <div class="hero-content">
-        <img class="hero-capsule" src="${esc(g.thumbnail || PLACEHOLDER_IMG)}" alt="${esc(g.title)}">
-        <div class="hero-info">
-          <h1>${esc(g.title)}</h1>
-          <div class="chips">${chips}</div>
-          <div class="dl-panel">
-            <div class="dl-label">LINK DOWNLOAD GOOGLE DRIVE</div>
-            <div class="dl-row">
-              <div class="dl-link" title="${esc(g.link)}">${esc(g.link || '— belum ada link —')}</div>
-              <button class="btn green big" id="d-copy">${LINK_ICON} Copy Link</button>
-              <button class="btn ghost" id="d-open" ${g.link ? '' : 'disabled'}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
-                Buka di Browser
-              </button>
-            </div>
-          </div>
-          <div class="detail-actions">
-            <button class="btn ghost" id="d-edit">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"></path></svg>
-              Edit
-            </button>
-            <button class="btn danger" id="d-delete">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              Hapus
+  const hero = document.createElement('div');
+  hero.className = 'detail-hero';
+  hero.innerHTML = `
+    <div class="hero-bg"></div>
+    <button class="btn ghost d-back" id="d-back" data-action="back">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      Kembali
+    </button>
+    <div class="hero-content">
+      <img class="hero-capsule" src="${esc(thumb)}" alt="${esc(g.title)}" decoding="async">
+      <div class="hero-info">
+        <h1></h1>
+        <div class="chips"></div>
+        <div class="dl-panel">
+          <div class="dl-label">LINK DOWNLOAD GOOGLE DRIVE</div>
+          <div class="dl-row">
+            <div class="dl-link"></div>
+            <button class="btn green big" id="d-copy" data-action="copy">${LINK_ICON} Copy Link</button>
+            <button class="btn ghost" id="d-open" data-action="open">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+              Buka di Browser
             </button>
           </div>
         </div>
+        <div class="detail-actions">
+          <button class="btn ghost" id="d-edit" data-action="edit">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"></path></svg>
+            Edit
+          </button>
+          <button class="btn danger" id="d-delete" data-action="delete">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            Hapus
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="detail-body">
-      <h2 class="sec-title">System Requirements</h2>
-      ${sysreq}
     </div>`;
+  hero.querySelector('.hero-bg').style.backgroundImage = `url('${thumb}')`;
+  hero.querySelector('h1').textContent = g.title || '';
 
-  $('#d-back').addEventListener('click', showLibrary);
-  $('#d-copy').addEventListener('click', () => copyGameLink(g.id));
-  $('#d-open').addEventListener('click', () => { if (g.link) window.api.openExternal(g.link); });
-  $('#d-edit').addEventListener('click', () => openForm(g));
-  $('#d-delete').addEventListener('click', () => askDeleteGame(g.id));
+  const chipsWrap = hero.querySelector('.chips');
+  for (const [cls, text] of chips) {
+    const span = document.createElement('span');
+    span.className = cls;
+    span.textContent = text;
+    chipsWrap.append(span);
+  }
+
+  const dlLink = hero.querySelector('.dl-link');
+  dlLink.textContent = g.link || '— belum ada link —';
+  dlLink.title = g.link || '';
+  hero.querySelector('#d-open').disabled = !g.link;
+
+  const body = document.createElement('div');
+  body.className = 'detail-body';
+  const secTitle = document.createElement('h2');
+  secTitle.className = 'sec-title';
+  secTitle.textContent = 'System Requirements';
+  const sysreq = document.createElement('div');
+  sysreq.className = 'sysreq';
+  if (hasAnySpec) {
+    sysreq.append(specColumn('MINIMUM:', minSpec), specColumn('RECOMMENDED:', recSpec));
+  } else {
+    const none = document.createElement('div');
+    none.className = 'req-all-empty';
+    none.textContent = 'Spesifikasi sistem belum diisi untuk game ini. Klik Edit untuk menambahkan.';
+    sysreq.append(none);
+  }
+  body.append(secTitle, sysreq);
+
+  frag.append(hero, body);
+  view.replaceChildren(frag);
 }
 
 function showDetail(id) {
@@ -283,7 +491,7 @@ function buildSpecInputs() {
     wrap.innerHTML = SPEC_FIELDS.map(([key, label]) => `
       <div class="spec-field">
         <label>${esc(label)}</label>
-        <input id="f-${side}-${key}" type="text" spellcheck="false" placeholder="${esc(specPlaceholder(key))}">
+        <input id="f-${side}-${key}" type="text" spellcheck="false" autocomplete="off" placeholder="${esc(specPlaceholder(key))}">
       </div>`).join('');
   }
 }
@@ -335,9 +543,7 @@ function openForm(game, prefill) {
     if (prefill.title) $('#f-title').value = prefill.title;
     if (prefill.genre) $('#f-genre').value = prefill.genre;
     if (prefill.price) $('#f-price').value = prefill.price;
-    if (prefill.thumbnail) {
-      state.pendingThumb = prefill.thumbnail;
-    }
+    if (prefill.thumbnail) state.pendingThumb = prefill.thumbnail;
     if (prefill.specs) fillSpecInputs(prefill.specs);
     if (prefill.appId) state.pendingSteamAppId = prefill.appId;
   }
@@ -361,6 +567,13 @@ function markInvalid(sel) {
   $(sel).classList.add('invalid');
 }
 
+// Hapus file thumbnail lama tanpa menunggu (api delete bersifat idempoten).
+function dropThumbFile(ref) {
+  if (ref && (ref.startsWith('/thumbnails/') || ref.startsWith('glib://'))) {
+    Promise.resolve(window.api.deleteThumbnail(ref)).catch(() => {});
+  }
+}
+
 async function saveGameFromForm() {
   clearInvalid();
   const title = $('#f-title').value.trim();
@@ -371,34 +584,31 @@ async function saveGameFromForm() {
 
   const old = state.editingId ? getGame(state.editingId) : null;
   const thumb = state.pendingThumb || '';
-  if (old && old.thumbnail && (old.thumbnail.startsWith('/thumbnails/') || old.thumbnail.startsWith('glib://')) && old.thumbnail !== thumb) {
-    window.api.deleteThumbnail(old.thumbnail);
-  }
+  if (old && old.thumbnail && old.thumbnail !== thumb) dropThumbFile(old.thumbnail);
 
   const now = new Date().toISOString();
+  const fields = {
+    title, link,
+    thumbnail: thumb,
+    genre: $('#f-genre').value.trim(),
+    price: $('#f-price').value.trim(),
+    specs: readSpecsFromForm(),
+  };
+
   if (old) {
-    Object.assign(old, {
-      title, link,
-      thumbnail: thumb,
-      genre: $('#f-genre').value.trim(),
-      price: $('#f-price').value.trim(),
+    Object.assign(old, fields, {
       steamAppId: old.steamAppId || '',
-      specs: readSpecsFromForm(),
       updatedAt: now,
     });
   } else {
-    state.games.push({
+    state.games.push(Object.assign({
       id: crypto.randomUUID(),
-      title, link,
-      thumbnail: thumb,
-      genre: $('#f-genre').value.trim(),
-      price: $('#f-price').value.trim(),
       steamAppId: state.pendingSteamAppId || '',
-      specs: readSpecsFromForm(),
       createdAt: now,
       updatedAt: now,
-    });
+    }, fields));
   }
+  reindexGames();
 
   await persist();
   closeModal();
@@ -415,10 +625,9 @@ function askDeleteGame(id) {
   if (!g) return;
   $('#confirm-msg').textContent = `"${g.title}" akan dihapus dari library beserta link dan spesifikasinya. Tindakan ini tidak bisa dibatalkan.`;
   state.confirmAction = async () => {
-    if (g.thumbnail && (g.thumbnail.startsWith('/thumbnails/') || g.thumbnail.startsWith('glib://'))) {
-      window.api.deleteThumbnail(g.thumbnail);
-    }
-    state.games = state.games.filter((x) => x.id !== id);
+    dropThumbFile(g.thumbnail);
+    setGames(state.games.filter((x) => x.id !== id));
+    hayCache.delete(id);
     await persist();
     closeModal();
     showLibrary();
@@ -452,27 +661,31 @@ function isModalOpen() {
    ========================================================================== */
 
 function openSteamModal() {
-  $('#steam-url').value = '';
-  $('#steam-status').classList.add('hidden');
-  $('#steam-status').textContent = '';
-  $('#steam-fetch').disabled = false;
-  $('#steam-fetch').textContent = 'Ambil Data Steam';
+  const urlEl = $('#steam-url');
+  urlEl.value = '';
+  const status = $('#steam-status');
+  status.classList.add('hidden');
+  status.textContent = '';
+  const btn = $('#steam-fetch');
+  btn.disabled = false;
+  btn.textContent = 'Ambil Data Steam';
   openModal('modal-steam');
-  setTimeout(() => $('#steam-url').focus(), 50);
+  setTimeout(() => urlEl.focus(), 50);
 }
 
 async function fetchSteam() {
   const url = $('#steam-url').value.trim();
+  const status = $('#steam-status');
+  const btn = $('#steam-fetch');
   if (!url) {
-    $('#steam-status').textContent = 'Masukkan link Steam Store terlebih dahulu.';
-    $('#steam-status').classList.remove('hidden');
+    status.textContent = 'Masukkan link Steam Store terlebih dahulu.';
+    status.classList.remove('hidden');
     return;
   }
 
-  const btn = $('#steam-fetch');
   btn.disabled = true;
   btn.textContent = 'Mengambil...';
-  $('#steam-status').classList.add('hidden');
+  status.classList.add('hidden');
 
   try {
     const result = await window.api.steamImport(url);
@@ -480,8 +693,8 @@ async function fetchSteam() {
     openForm(null, result);
     toast('Data terisi otomatis — tinggal isi link Google Drive');
   } catch (err) {
-    $('#steam-status').textContent = err.message || 'Gagal mengambil data dari Steam.';
-    $('#steam-status').classList.remove('hidden');
+    status.textContent = (err && err.message) || 'Gagal mengambil data dari Steam.';
+    status.classList.remove('hidden');
     btn.disabled = false;
     btn.textContent = 'Ambil Data Steam';
   }
@@ -498,11 +711,11 @@ function bindEvents() {
   $('#btn-empty-add').addEventListener('click', () => openForm(null));
   $('#search').addEventListener('input', (e) => {
     state.query = e.target.value;
-    renderGrid();
+    scheduleRender(); // digabung per frame, tidak reflow tiap ketikan
   });
   $('#sort').addEventListener('change', (e) => {
     state.sort = e.target.value;
-    renderGrid();
+    scheduleRender();
   });
 
   // Grid: klik kartu -> detail, klik copy -> salin link, klik hapus -> konfirmasi
@@ -523,16 +736,30 @@ function bindEvents() {
     if (card) showDetail(card.dataset.id);
   });
 
+  // Detail: satu listener untuk semua tombol (delegation, tidak didaftarkan ulang)
+  $('#view-detail').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const g = getGame(state.detailId);
+    if (!g) return;
+    switch (btn.dataset.action) {
+      case 'back': showLibrary(); break;
+      case 'copy': copyGameLink(g.id); break;
+      case 'open': if (g.link) window.api.openExternal(g.link); break;
+      case 'edit': openForm(g); break;
+      case 'delete': askDeleteGame(g.id); break;
+    }
+  });
+
   // Gambar gagal load -> placeholder (capture phase karena error tidak bubble)
   const imgErrorHandler = (e) => {
-    if (e.target.tagName === 'IMG' && e.target.src !== PLACEHOLDER_IMG) {
-      e.target.src = PLACEHOLDER_IMG;
-    }
+    const img = e.target;
+    if (img.tagName !== 'IMG' || img.dataset.fallback) return;
+    img.dataset.fallback = '1';
+    img.src = PLACEHOLDER_IMG;
   };
   $('#grid').addEventListener('error', imgErrorHandler, true);
   $('#view-detail').addEventListener('error', imgErrorHandler, true);
-
-  // Detail (dibind ulang tiap render di renderDetail)
 
   // Form
   $('#form-close').addEventListener('click', closeModal);
@@ -575,7 +802,9 @@ function bindEvents() {
   });
 
   // Backdrop klik -> tutup modal
-  $('#modal-backdrop').addEventListener('click', closeModal);
+  $('#modal-backdrop').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
+  });
 
   // Keyboard
   document.addEventListener('keydown', (e) => {
@@ -603,9 +832,9 @@ async function init() {
   buildSpecInputs();
   bindEvents();
   try {
-    state.games = (await window.api.loadLibrary()) || [];
+    setGames((await window.api.loadLibrary()) || []);
   } catch (err) {
-    state.games = [];
+    setGames([]);
     toast('Gagal memuat data library', true);
   }
   renderGrid();

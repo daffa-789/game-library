@@ -224,8 +224,8 @@ if ($Feature -eq 0 -or $Feature -eq 4) {
         try {
             $uuidRegex = "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
             # In Go implementation, UUID is generated when ID is empty
-            $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-            Assert-Matches "UUID v4" $appGo "app.go must implement UUID v4 generation"
+            $appGo = Get-GoSource $ProjectRoot
+            Assert-Matches "UUID v4" $appGo "Go backend must implement UUID v4 generation"
             Assert-Matches "b\[6\] = \(b\[6\] & 0x0f\) \| 0x40" $appGo "UUID v4 version bit mask must be present"
         }
         finally {
@@ -234,19 +234,19 @@ if ($Feature -eq 0 -or $Feature -eq 4) {
     }
 
     Invoke-TestCase -Id "T1.4.3" -Tier "1" -Feature "F4" -Name "SaveLibrary sets createdAt and updatedAt in RFC3339 format" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "time\.RFC3339Nano" $appGo "app.go must use RFC3339 timestamp format"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "time\.RFC3339Nano" $appGo "Go backend must use RFC3339 timestamp format"
     }
 
     Invoke-TestCase -Id "T1.4.4" -Tier "1" -Feature "F4" -Name "SaveLibrary sanitizes string fields to contract limits" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "trim\(g\.Title,\s*200\)" $appGo "Title must be capped at 200 characters"
-        Assert-Matches "trim\(g\.Genre,\s*120\)" $appGo "Genre must be capped at 120 characters"
-        Assert-Matches "trim\(s\.OS,\s*400\)" $appGo "Specs must be capped at 400 characters"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "trim\(g\.Title,\s*maxLenTitle\)" $appGo "Title must be capped at 200 characters"
+        Assert-Matches "trim\(g\.Genre,\s*maxLenGenre\)" $appGo "Genre must be capped at 120 characters"
+        Assert-Matches "trim\(s\.OS,\s*maxLenSpecField\)" $appGo "Specs must be capped at 400 characters"
     }
 
     Invoke-TestCase -Id "T1.4.5" -Tier "1" -Feature "F4" -Name "SaveLibrary handles empty games list cleanly" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "if games == nil \{" $appGo "SaveLibrary must guard against nil games slice"
     }
 }
@@ -258,9 +258,9 @@ if ($Feature -eq 0 -or $Feature -eq 5) {
     Write-Host "`n--- Feature 5: Data Persistence & Atomicity ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T1.5.1" -Tier "1" -Feature "F5" -Name "SaveLibrary writes to temporary file before atomic rename" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "tmpFile := fmt\.Sprintf\(" $appGo "SaveLibrary must write to tmpFile first"
-        Assert-Matches "os\.Rename\(tmpFile, a\.dataFile\)" $appGo "SaveLibrary must rename tmpFile to dataFile atomically"
+        Assert-Matches "replaceFile\(tmpFile, a\.dataFile\)" $appGo "SaveLibrary must rename tmpFile to dataFile atomically"
     }
 
     Invoke-TestCase -Id "T1.5.2" -Tier "1" -Feature "F5" -Name "Corrupted library.json triggers backup with .rusak- prefix" -ScriptBlock {
@@ -269,20 +269,20 @@ if ($Feature -eq 0 -or $Feature -eq 5) {
     }
 
     Invoke-TestCase -Id "T1.5.3" -Tier "1" -Feature "F5" -Name "Corrupted library.json recovery does not throw unhandled exception" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "corruptBackup := fmt\.Sprintf\(" $appGo "Backup filename format must be implemented"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "backup := fmt\.Sprintf\(" $appGo "Backup filename format must be implemented"
         Assert-Matches "return \[\]Game\{\}, nil" $appGo "Corrupted file must safely return empty games list"
     }
 
     Invoke-TestCase -Id "T1.5.4" -Tier "1" -Feature "F5" -Name "Corrupted backup suffix is formatted as millisecond timestamp" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "time\.Now\(\)\.UnixMilli\(\)" $appGo "Corrupted backup must use millisecond epoch"
     }
 
     Invoke-TestCase -Id "T1.5.5" -Tier "1" -Feature "F5" -Name "Database directory %APPDATA%\libray-game created automatically" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "os\.MkdirAll\(a\.thumbsDir,\s*0755\)" $appGo "App initialization must create thumbnails dir"
-        Assert-Matches "os\.MkdirAll\(a\.dataDir,\s*0755\)" $appGo "App persistence must create data dir"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "os\.MkdirAll\(a\.thumbsDir,\s*0o755\)" $appGo "App initialization must create thumbnails dir"
+        Assert-Matches "os\.MkdirAll\(a\.dataDir,\s*0o755\)" $appGo "App persistence must create data dir"
     }
 }
 
@@ -293,18 +293,18 @@ if ($Feature -eq 0 -or $Feature -eq 6) {
     Write-Host "`n--- Feature 6: Thumbnail Import & Serving ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T1.6.1" -Tier "1" -Feature "F6" -Name "Local thumbnails directory is initialized" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'filepath\.Join\(dataDir,\s*"thumbnails"\)' $appGo "Thumbnails path must be in dataDir/thumbnails"
     }
 
     Invoke-TestCase -Id "T1.6.2" -Tier "1" -Feature "F6" -Name "PickThumbnail returns path prefixed with /thumbnails/" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'return "/thumbnails/" \+ destName' $appGo "PickThumbnail must return /thumbnails/ prefix"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'return thumbURLPrefix \+ name' $appGo "PickThumbnail must return /thumbnails/ prefix"
     }
 
     Invoke-TestCase -Id "T1.6.3" -Tier "1" -Feature "F6" -Name "Thumbnail storage uses random hex filenames" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "hex\.EncodeToString\(randomBytes\)" $appGo "Thumbnail file name must use hex encoding"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "hex\.EncodeToString\(buf\)" $appGo "Thumbnail file name must use hex encoding"
     }
 
     Invoke-TestCase -Id "T1.6.4" -Tier "1" -Feature "F6" -Name "Thumbnail HTTP handler serves images with Cache-Control" -ScriptBlock {
@@ -313,8 +313,8 @@ if ($Feature -eq 0 -or $Feature -eq 6) {
     }
 
     Invoke-TestCase -Id "T1.6.5" -Tier "1" -Feature "F6" -Name "Thumbnail HTTP handler blocks path traversal" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "strings\.HasPrefix\(filepath\.Clean\(targetPath\),\s*cleanThumbs\)" $appGo "ThumbnailHandler must enforce directory boundary"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "filepath\.Rel\(cleanDir,\s*filepath\.Clean\(target\)\)" $appGo "ThumbnailHandler must enforce directory boundary"
     }
 }
 
@@ -330,23 +330,23 @@ if ($Feature -eq 0 -or $Feature -eq 7) {
     }
 
     Invoke-TestCase -Id "T1.7.2" -Tier "1" -Feature "F7" -Name "DeleteThumbnail trims /thumbnails/ URL prefix" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'strings\.TrimPrefix\(ref,\s*"/thumbnails/"\)' $appGo "DeleteThumbnail must trim /thumbnails/"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'strings\.TrimPrefix\(ref,\s*thumbURLPrefix\)' $appGo "DeleteThumbnail must trim /thumbnails/"
     }
 
     Invoke-TestCase -Id "T1.7.3" -Tier "1" -Feature "F7" -Name "DeleteThumbnail trims legacy glib://thumb/ prefix" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'strings\.TrimPrefix\(ref,\s*"glib://thumb/"\)' $appGo "DeleteThumbnail must trim legacy glib://thumb/"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'strings\.TrimPrefix\(ref,\s*legacyThumbPrefix\)' $appGo "DeleteThumbnail must trim legacy glib://thumb/"
     }
 
     Invoke-TestCase -Id "T1.7.4" -Tier "1" -Feature "F7" -Name "DeleteThumbnail safely handles non-existent file without error" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'if err == nil && !fi\.IsDir\(\) \{' $appGo "DeleteThumbnail must check existence and not error on missing file"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'if err != nil \|\| fi\.IsDir\(\) \{' $appGo "DeleteThumbnail must check existence and not error on missing file"
     }
 
     Invoke-TestCase -Id "T1.7.5" -Tier "1" -Feature "F7" -Name "DeleteThumbnail prevents path traversal outside thumbnails" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'if strings\.HasPrefix\(filepath\.Clean\(targetPath\),\s*cleanThumbs\)' $appGo "DeleteThumbnail must prevent deleting outside thumbs dir"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'rel != name \|\| filepath\.Dir\(rel\)' $appGo "DeleteThumbnail must prevent deleting outside thumbs dir"
     }
 }
 
@@ -357,17 +357,17 @@ if ($Feature -eq 0 -or $Feature -eq 8) {
     Write-Host "`n--- Feature 8: Steam Import API & Specs Parsing ---" -ForegroundColor Yellow
 
     Invoke-TestCase -Id "T1.8.1" -Tier "1" -Feature "F8" -Name "SteamImport regex parses AppID from standard Steam Store URLs" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'store\\\.steampowered\\\.com/app/\(\\d\+\)' $appGo "Steam URL regex must extract numeric AppID"
     }
 
     Invoke-TestCase -Id "T1.8.2" -Tier "1" -Feature "F8" -Name "SteamImport queries Steam API with l=english parameter" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'appdetails\?appids=%s&l=english' $appGo "Steam API URL must include l=english"
     }
 
     Invoke-TestCase -Id "T1.8.3" -Tier "1" -Feature "F8" -Name "SteamImport parses game metadata fields" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "Title:\s*detail\.Name" $appGo "Steam title must be parsed"
         Assert-Matches "ReleaseDate:\s*detail\.ReleaseDate\.Date" $appGo "Steam release date must be parsed"
         Assert-Matches "Price:\s*detail\.PriceOverview\.FinalFormatted" $appGo "Steam price must be parsed"
@@ -379,8 +379,8 @@ if ($Feature -eq 0 -or $Feature -eq 8) {
     }
 
     Invoke-TestCase -Id "T1.8.5" -Tier "1" -Feature "F8" -Name "SteamImport parses 9-field recommended system specifications" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches "recSpecs = a\.parseSysReq\(reqs\.Recommended\)" $appGo "Steam recommended specs must be parsed"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "recSpecs = a\.parseSysReq\(parsed\.Recommended\)" $appGo "Steam recommended specs must be parsed"
     }
 }
 
@@ -396,17 +396,17 @@ if ($Feature -eq 0 -or $Feature -eq 9) {
     }
 
     Invoke-TestCase -Id "T1.9.2" -Tier "1" -Feature "F9" -Name "OpenExternal permits http:// URLs" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
-        Assert-Matches 'strings\.HasPrefix\(strings\.ToLower\(trimmed\),\s*"http://"\)' $appGo "OpenExternal must allow http://"
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'parsed, err := url\.Parse\(trimmed\)' $appGo "OpenExternal must allow http://"
     }
 
     Invoke-TestCase -Id "T1.9.3" -Tier "1" -Feature "F9" -Name "OpenExternal rejects unsafe schemes (ftp, file, javascript)" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches 'return fmt\.Errorf\("URL tidak valid"\)' $appGo "OpenExternal must reject invalid URL schemes"
     }
 
     Invoke-TestCase -Id "T1.9.4" -Tier "1" -Feature "F9" -Name "CopyText exposes runtime clipboard API" -ScriptBlock {
-        $appGo = Get-Content (Join-Path $ProjectRoot "app.go") -Raw
+        $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "runtime\.ClipboardSetText\(a\.ctx,\s*text\)" $appGo "CopyText must call runtime.ClipboardSetText"
     }
 

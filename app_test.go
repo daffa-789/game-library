@@ -311,4 +311,3 @@ func TestSteamImport_InvalidURL(t *testing.T) {
 		t.Errorf("expected error for non-steam URL")
 	}
 }
-

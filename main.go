@@ -38,7 +38,7 @@ func main() {
 		},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "com.daffa.libraygame",
-			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
 				app.RestoreWindow()
 			},
 		},

@@ -217,6 +217,27 @@ function Assert-JsonValid {
 
 
 # ----------------------------------------------------------------------------
+# Go Source Inspection
+#
+# Backend Go proyek ini dipecah ke beberapa berkas (app.go, library.go,
+# thumbnails.go, steam.go, sanitize.go, system.go). Pemeriksaan "apakah
+# perilaku X diimplementasikan" tidak boleh terikat pada satu nama berkas,
+# jadi baca seluruh berkas *.go non-test sebagai satu kesatuan.
+# ----------------------------------------------------------------------------
+
+function Get-GoSource {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+    $files = @(Get-ChildItem -Path $Root -Filter "*.go" -File |
+        Where-Object { $_.Name -notlike "*_test.go" } |
+        Sort-Object Name)
+    if ($files.Count -eq 0) { return "" }
+    return (($files | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`r`n")
+}
+
+
+# ----------------------------------------------------------------------------
 # PE Binary Inspection (MZ header, Machine, Subsystem, Size)
 # ----------------------------------------------------------------------------
 
