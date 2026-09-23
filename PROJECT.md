@@ -1,8 +1,8 @@
-# Project: Game Library Migration (Electron to Wails v2)
+# Project: SoftGame Library Migration (Electron to Wails v2)
 
 ## Architecture
 - **Backend**: Go 1.25+ with Wails v2.16.0 framework, split into focused files in `package main`:
-  - `main.go`: Entry point, Wails options, single instance lock (`com.daffa.libraygame`), window sizing (1400x880, min 980x620), dark theme background `#171a21`, asset server configuration with dynamic thumbnail fallback handler.
+  - `main.go`: Entry point, Wails options, single instance lock (`com.daffa.softgamelibrary`), window sizing (1400x880, min 980x620), dark theme background `#171a21`, asset server configuration with dynamic thumbnail fallback handler.
   - `app.go`: Data models, `App` struct, lifecycle (`startup`, `RestoreWindow`), shared `*http.Client` with connection pooling, guard-rail constants (max games, max file/thumbnail bytes, timeouts), image extension whitelist.
   - `library.go`: `LoadLibrary` / `SaveLibrary`, atomic write with retry, corrupt-file quarantine, in-memory parse cache keyed by file fingerprint, sample data.
   - `thumbnails.go`: AssetServer handler, `PickThumbnail`, `DeleteThumbnail`, and the single `safeThumbPath` validation gateway.
@@ -10,14 +10,14 @@
   - `sanitize.go`: Field sanitisation with named length limits, UUID v4 generation.
   - `system.go`: `OpenExternal` (url.Parse scheme/host validation) and `CopyText`.
 - **Data Persistence**:
-  - `%APPDATA%\libray-game\library.json`: JSON database of games with atomic write (`.tmp` + rename) and corrupted file backup (`.rusak-<timestamp>`).
-  - `%APPDATA%\libray-game\thumbnails\`: Local directory for stored thumbnails, served dynamically to WebView2 via `AssetServer.Handler` on path `/thumbnails/*`.
+  - `%APPDATA%\softgame-library\library.json`: JSON database of games with atomic write (`.tmp` + rename) and corrupted file backup (`.rusak-<timestamp>`).
+  - `%APPDATA%\softgame-library\thumbnails\`: Local directory for stored thumbnails, served dynamically to WebView2 via `AssetServer.Handler` on path `/thumbnails/*`.
 - **Frontend**: Vanilla HTML5/CSS3/ES6 in `renderer/` (no bundler or npm dependencies).
   - `wails-bridge.js`: Shim mapping `window.api.*` calls to `window.go.main.App.*`.
   - `styles.css`: Steam dark theme, Epic Games grid layout, responsive design, `content-visibility: auto` cards.
   - `app.js`: State management, search, sort, modals, game CRUD, thumbnail preview. Grid uses keyed reconciliation plus an element pool (cards are reused, not rebuilt), a cached lowercase search index, rAF-coalesced renders with a timeout fallback, and delegated events.
 - **Packaging**:
-  - Portable: `wails build -clean -trimpath -ldflags "-s -w"` → `build/bin/GameLibrary.exe` (~11.4 MB).
+  - Portable: `wails build -clean -trimpath -ldflags "-s -w"` → `build/bin/SoftGameLibrary.exe` (~11.4 MB).
   - Installer: `wails build ... -nsis -installscope user` → `build/bin/GameLibrary-Setup-<version>-amd64.exe` (~5.3 MB), scripted by `build/windows/installer/project.nsi` (Indonesian wizard, per-user scope, WebView2 bootstrapper, LZMA, catalog preserved on uninstall).
 
 ---
@@ -29,7 +29,7 @@
 | 2 | Go Module & Manifest Setup | `go.mod`, `build/windows/info.json`, `build/windows/wails.exe.manifest`, app icons | M1 | ORIGINAL_REQUEST §R3 |
 | 3 | Data Schema Compatibility | Structs for `Game`, `SpecsContainer`, `SystemSpecs` matching 100% of existing `library.json` | M1 | ORIGINAL_REQUEST §R1 |
 | 4 | Atomic Library Persistence | `LoadLibrary` and `SaveLibrary` with `.tmp` write, rename, corrupt backup, sample data fallback | M1 | ORIGINAL_REQUEST §R1 |
-| 5 | Dynamic Thumbnail Asset Server | `AssetServer.Handler` serving `%APPDATA%\libray-game\thumbnails\` on `/thumbnails/*` with path sanitization | M1 | ORIGINAL_REQUEST §R1 |
+| 5 | Dynamic Thumbnail Asset Server | `AssetServer.Handler` serving `%APPDATA%\softgame-library\thumbnails\` on `/thumbnails/*` with path sanitization | M1 | ORIGINAL_REQUEST §R1 |
 | 6 | Native Thumbnail Picker | `PickThumbnail` using Wails file dialog, copying image to AppData with hex filename | M1 | ORIGINAL_REQUEST §R1 |
 | 7 | Thumbnail Deletion | `DeleteThumbnail` removing image file from AppData with path safety checks | M1 | ORIGINAL_REQUEST §R1 |
 | 8 | Single Instance Lock | Windows mutex focusing existing window on secondary launch attempt | M1 | Survey (main.js parity) |
@@ -37,7 +37,7 @@
 | 10 | System Clipboard Text Copy | `CopyText` copying links to Windows clipboard via runtime | M2 | ORIGINAL_REQUEST §R1 |
 | 11 | Steam Store API Client | `SteamImport` fetching `store.steampowered.com/api/appdetails` with custom User-Agent | M2 | ORIGINAL_REQUEST §R1 |
 | 12 | Steam HTML SysReq Parser | Regex parser extracting 9 min/rec specs (`os`, `cpu`, `ram`, `gpu`, `dx`, `net`, `storage`, `sound`, `notes`) | M2 | ORIGINAL_REQUEST §R1 |
-| 13 | Steam Thumbnail Downloader | Downloading Steam `header_image` to `%APPDATA%\libray-game\thumbnails\` and returning URL ref | M2 | ORIGINAL_REQUEST §R1 |
+| 13 | Steam Thumbnail Downloader | Downloading Steam `header_image` to `%APPDATA%\softgame-library\thumbnails\` and returning URL ref | M2 | ORIGINAL_REQUEST §R1 |
 | 14 | Frontend Wails API Shim | `renderer/wails-bridge.js` providing `window.api` interface to `window.go.main.App` | M3 | ORIGINAL_REQUEST §R2 |
 | 15 | Frontend Asset & HTML Adaptation | Updating `index.html` for `wails-bridge.js` inclusion and fixing `logo.svg` relative path | M3 | ORIGINAL_REQUEST §R2 |
 | 16 | Frontend Bug & Scheme Fix | Guarding `#f-thumburl` in `app.js:546` and updating thumbnail deletion check for `/thumbnails/` | M3 | Survey (frontend handoff) |
@@ -131,8 +131,8 @@ interface BackendAPI {
 ```
 
 ### Storage Contract
-- Library file: `%APPDATA%\libray-game\library.json`
-- Thumbnails directory: `%APPDATA%\libray-game\thumbnails\`
+- Library file: `%APPDATA%\softgame-library\library.json`
+- Thumbnails directory: `%APPDATA%\softgame-library\thumbnails\`
 - URL scheme in frontend: `/thumbnails/<filename>` (legacy `glib://thumb/<filename>` normalized on load)
 
 ---
@@ -156,7 +156,7 @@ c:\Users\Daffa\Desktop\Libray Game\
 ├── hardening_test.go            # Refactor proof tests (10)
 ├── build/
 │   ├── appicon.png
-│   ├── bin/                     # GameLibrary.exe, GameLibrary-Setup-<ver>-amd64.exe
+│   ├── bin/                     # SoftGameLibrary.exe, GameLibrary-Setup-<ver>-amd64.exe
 │   └── windows/
 │       ├── icon.ico
 │       ├── info.json

@@ -14,28 +14,39 @@ import (
 
 // ---------------------------------------------------------------------------
 // Konstanta batas (guard rails) — semua nilai dipakai bersama oleh layer
-// persistensi, thumbnail, dan impor Steam.
+// persistensi, thumbnail, impor Steam, dan impor situs resmi software.
 // ---------------------------------------------------------------------------
 
 const (
-	// appDataDirName nama folder data di %APPDATA% (jangan diubah: kompatibel
-	// dengan library.json hasil migrasi Electron).
-	appDataDirName = "libray-game"
+	// appDataDirName nama folder data di %APPDATA% untuk hasil penggabungan
+	// katalog game + software.
+	appDataDirName = "softgame-library"
 
 	// maxGames batas jumlah game yang disimpan ke disk.
 	maxGames = 5000
 
-	// maxLibraryFileBatas ukuran maksimum library.json yang mau dibaca.
+	// maxSoftware batas jumlah entri software yang disimpan ke disk.
+	maxSoftware = 5000
+
+	// maxLibraryFileBytes ukuran maksimum library.json yang mau dibaca.
 	// File di atas ini dianggap rusak supaya app tidak ke-habisan memori.
 	maxLibraryFileBytes = 64 << 20 // 64 MiB
 
 	// maxThumbnailBytes ukuran maksimum satu file thumbnail (unduh / impor).
 	maxThumbnailBytes = 25 << 20 // 25 MiB
 
+	// maxPageBytes batas baca halaman web saat impor software. Halaman produk
+	// modern bisa >2 MiB, tapi di atas ini isinya sudah JS, bukan metadata.
+	maxPageBytes = 4 << 20 // 4 MiB
+
 	steamAPITimeout   = 15 * time.Second
 	steamImageTimeout = 45 * time.Second
-	steamUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GameLibrary/1.0"
-	thumbCacheMaxAge  = 86400
+
+	apiTimeout      = 15 * time.Second
+	imageTimeout    = 45 * time.Second
+	importUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SoftGameLibrary/1.0"
+
+	thumbCacheMaxAge = 86400
 )
 
 // allowedThumbExt whitelist ekstensi gambar yang boleh disimpan di folder
@@ -47,7 +58,12 @@ var allowedThumbExt = map[string]bool{
 }
 
 // ---------------------------------------------------------------------------
-// Data Models (100% kompatibel dengan library.json lama)
+// Data Models
+//
+// Katalog game dipertahankan 100% kompatibel dengan library.json lama hasil
+// migrasi Electron + Steam. Katalog software sengaja TIDAK punya blok
+// spesifikasi sistem: software dijual per paket, dan detail yang benar-benar
+// ditanyakan pembeli adalah versi, lisensi, platform, ukuran, dan harganya.
 // ---------------------------------------------------------------------------
 
 type SystemSpecs struct {
@@ -81,8 +97,37 @@ type Game struct {
 	UpdatedAt  string         `json:"updatedAt"`
 }
 
+// Software satu entri katalog perangkat lunak.
+type Software struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Thumbnail string `json:"thumbnail"`
+	Link      string `json:"link"`
+	Website   string `json:"website"`
+	Category  string `json:"category"`
+	Version   string `json:"version"`
+	License   string `json:"license"`
+	Platform  string `json:"platform"`
+	Size      string `json:"size"`
+	Price     string `json:"price"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// LibraryFile skema library.json: kedua katalog hidup berdampingan dalam satu
+// file supaya perpindahan antar tab tidak pernah menyisakan catalog setengah
+// tersimpan. Katalog lama (hanya "games") tetap terbaca: key "software" yang
+// hilang dianggap kosong.
 type LibraryFile struct {
-	Games []Game `json:"games"`
+	Games    []Game     `json:"games"`
+	Software []Software `json:"software"`
+}
+
+// LibraryData hasil parse library.json yang sudah dinormalisasi; inilah bentuk
+// cache in-memory App.
+type LibraryData struct {
+	Games    []Game
+	Software []Software
 }
 
 type SteamImportResult struct {
@@ -96,6 +141,18 @@ type SteamImportResult struct {
 	Specs       SpecsContainer `json:"specs"`
 }
 
+// SoftwareImportResult hasil pembacaan halaman resmi sebuah software. Nilainya
+// hanya dipakai untuk mengisi form — tidak ada kebutuhan sistem di sini.
+type SoftwareImportResult struct {
+	Title     string `json:"title"`
+	Thumbnail string `json:"thumbnail"`
+	Category  string `json:"category"`
+	Version   string `json:"version"`
+	License   string `json:"license"`
+	Platform  string `json:"platform"`
+	Website   string `json:"website"`
+}
+
 // ---------------------------------------------------------------------------
 // App Struct & Lifecycle
 // ---------------------------------------------------------------------------
@@ -107,13 +164,18 @@ type App struct {
 	dataFile  string
 	thumbsDir string
 
+	// legacyDirs folder data aplikasi lama (Game Library & Software Library
+	// terpisah). Hanya diisi pada NewApp(): test yang memakai
+	// newAppWithDataDir tidak boleh ikut membaca %APPDATA% pengguna.
+	legacyDirs []string
+
 	// mu melindungi file library + cache di bawahnya (bukan field lain).
 	mu sync.Mutex
-	// libraryCache menyimpan hasil parse terakhir supaya LoadLibrary tidak
-	// selalu membaca + unmarshal file dari disk. invalidate() dipanggil setiap
-	// kali file ditulis ulang; fingerprint file tetap dicek untuk mendeteksi
-	// perubahan dari luar aplikasi.
-	libraryCache  []Game
+	// libraryCache menyimpan hasil parse terakhir supaya LoadLibrary /
+	// LoadSoftware tidak selalu membaca + unmarshal file dari disk. Cache
+	// dibuang setiap kali file ditulis ulang; fingerprint file tetap dicek
+	// untuk mendeteksi perubahan dari luar aplikasi.
+	libraryCache  *LibraryData
 	libraryFinger string
 	libraryCached bool
 
@@ -128,7 +190,9 @@ func NewApp() *App {
 			configDir = "."
 		}
 	}
-	return newAppWithDataDir(filepath.Join(configDir, appDataDirName))
+	a := newAppWithDataDir(filepath.Join(configDir, appDataDirName))
+	a.legacyDirs = legacyDataDirs(configDir)
+	return a
 }
 
 func newAppWithDataDir(dataDir string) *App {

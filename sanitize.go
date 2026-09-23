@@ -17,6 +17,10 @@ const (
 	maxLenTitle      = 200
 	maxLenRef        = 2000
 	maxLenGenre      = 120
+	maxLenCategory   = 120
+	maxLenVersion    = 60
+	maxLenLicense    = 60
+	maxLenPlatform   = 80
 	maxLenSize       = 60
 	maxLenPrice      = 60
 	maxLenSteamAppID = 20
@@ -31,7 +35,7 @@ func (a *App) sanitizeGame(g Game, now string) Game {
 	}
 
 	if g.ID == "" {
-		g.ID = newGameID()
+		g.ID = newEntryID()
 	}
 	if g.CreatedAt == "" {
 		g.CreatedAt = now
@@ -66,12 +70,42 @@ func sanitizeSpecs(s SystemSpecs, trim func(string, int) string) SystemSpecs {
 	}
 }
 
-// newGameID menghasilkan UUID v4 tanpa dependensi eksternal.
-func newGameID() string {
+// sanitizeSoftware membersihkan satu entri katalog perangkat lunak. Tidak ada
+// blok spesifikasi di sini: entri software hanya punya metadata + link.
+func (a *App) sanitizeSoftware(sw Software, now string) Software {
+	trim := func(s string, limit int) string {
+		return truncateUTF8(strings.TrimSpace(s), limit)
+	}
+
+	if sw.ID == "" {
+		sw.ID = newEntryID()
+	}
+	if sw.CreatedAt == "" {
+		sw.CreatedAt = now
+	}
+	sw.UpdatedAt = now
+
+	sw.ID = trim(sw.ID, maxLenID)
+	sw.Title = trim(sw.Title, maxLenTitle)
+	sw.Thumbnail = trim(sw.Thumbnail, maxLenRef)
+	sw.Link = trim(sw.Link, maxLenRef)
+	sw.Website = trim(sw.Website, maxLenRef)
+	sw.Category = trim(sw.Category, maxLenCategory)
+	sw.Version = trim(sw.Version, maxLenVersion)
+	sw.License = trim(sw.License, maxLenLicense)
+	sw.Platform = trim(sw.Platform, maxLenPlatform)
+	sw.Size = trim(sw.Size, maxLenSize)
+	sw.Price = trim(sw.Price, maxLenPrice)
+	return sw
+}
+
+// newEntryID menghasilkan UUID v4 tanpa dependensi eksternal. Dipakai kedua
+// katalog karena ID hanya perlu unik di dalam file library yang sama.
+func newEntryID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		// Praktis tidak terjadi di Windows; fallback tetap unik secara praktis.
-		return fmt.Sprintf("g-%d", time.Now().UnixNano())
+		return fmt.Sprintf("id-%d", time.Now().UnixNano())
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 // versi 4
 	b[8] = (b[8] & 0x3f) | 0x80 // varian RFC 4122

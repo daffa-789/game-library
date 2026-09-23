@@ -7,7 +7,11 @@ export function CopyText(arg1:string):Promise<void>;
 
 export function DeleteThumbnail(arg1:string):Promise<void>;
 
+export function ImportSoftware(arg1:string):Promise<main.SoftwareImportResult>;
+
 export function LoadLibrary():Promise<Array<main.Game>>;
+
+export function LoadSoftware():Promise<Array<main.Software>>;
 
 export function OpenExternal(arg1:string):Promise<void>;
 
@@ -16,6 +20,8 @@ export function PickThumbnail():Promise<string>;
 export function RestoreWindow():Promise<void>;
 
 export function SaveLibrary(arg1:Array<main.Game>):Promise<void>;
+
+export function SaveSoftware(arg1:Array<main.Software>):Promise<void>;
 
 export function SteamImport(arg1:string):Promise<main.SteamImportResult>;
 

@@ -17,7 +17,7 @@ if (-not (Test-Path $UtilsPath)) {
 
 $ProjectRoot = $global:ProjectRoot
 Write-Host "`n========================================================" -ForegroundColor Cyan
-Write-Host " Running Tier 2: Boundary & Corner Cases (70 Tests)" -ForegroundColor Cyan
+Write-Host " Running Tier 2: Boundary & Corner Cases (74 Tests)" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 # ----------------------------------------------------------------------------
@@ -84,8 +84,8 @@ if ($Feature -eq 0 -or $Feature -eq 1) {
 if ($Feature -eq 0 -or $Feature -eq 2) {
     Write-Host "`n--- Feature 2 Boundaries: Executable Size & PE Headers ---" -ForegroundColor Yellow
 
-    $targetBinPath = Join-Path $ProjectRoot "build\bin\GameLibrary.exe"
-    $fallbackBinPath = Join-Path $ProjectRoot "libray-game.exe"
+    $targetBinPath = Join-Path $ProjectRoot "build\bin\SoftGameLibrary.exe"
+    $fallbackBinPath = Join-Path $ProjectRoot "softgame-library.exe"
     $activeBin = if (Test-Path $targetBinPath) { $targetBinPath } elseif (Test-Path $fallbackBinPath) { $fallbackBinPath } else { $null }
 
     Invoke-TestCase -Id "T2.2.1" -Tier "2" -Feature "F2" -Name "Binary size boundary check strictly < 15,728,640 bytes" -ScriptBlock {
@@ -714,6 +714,38 @@ if ($Feature -eq 0 -or $Feature -eq 14) {
         # Wails v2 with vanilla frontend embeds renderer/ directory directly in Go binary
         $mainGo = Get-Content (Join-Path $ProjectRoot "main.go") -Raw
         Assert-Matches "//go:embed all:renderer" $mainGo "main.go must embed renderer directory via Go embed"
+    }
+}
+
+# ----------------------------------------------------------------------------
+# Feature 15: Batas katalog software
+# ----------------------------------------------------------------------------
+if ($Feature -eq 0 -or $Feature -eq 15) {
+    Write-Host "`n--- Feature 15: Software Catalog Boundaries ---" -ForegroundColor Yellow
+
+    Invoke-TestCase -Id "T2.15.1" -Tier "2" -Feature "F15" -Name "SaveSoftware caps the batch at maxSoftware entries" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "maxSoftware = 5000" $appGo "maxSoftware guard rail must exist"
+        Assert-Matches "items = items\[:maxSoftware\]" $appGo "Oversized software batches must be sliced"
+    }
+
+    Invoke-TestCase -Id "T2.15.2" -Tier "2" -Feature "F15" -Name "Software text fields are capped by named limits" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "trim\(sw\.Title, maxLenTitle\)" $appGo "Title must be capped"
+        Assert-Matches "trim\(sw\.Version, maxLenVersion\)" $appGo "Version must be capped"
+        Assert-Matches "trim\(sw\.Platform, maxLenPlatform\)" $appGo "Platform must be capped"
+    }
+
+    Invoke-TestCase -Id "T2.15.3" -Tier "2" -Feature "F15" -Name "Website importer bounds the page it reads" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "maxPageBytes = 4 << 20" $appGo "Importer must cap page size"
+        Assert-Matches "io\.LimitReader\(res\.Body, maxPageBytes\)" $appGo "Importer must read through LimitReader"
+        Assert-Matches "u\.User != nil" $appGo "Importer must reject credential-bearing URLs"
+    }
+
+    Invoke-TestCase -Id "T2.15.4" -Tier "2" -Feature "F15" -Name "Software persistence and importer pass their Go tests" -ScriptBlock {
+        $res = & go test -run "Software|ImportSoftware" ./... 2>&1
+        Assert-True ($LASTEXITCODE -eq 0) "Go software-catalog tests must pass: $res"
     }
 }
 

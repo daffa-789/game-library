@@ -10,8 +10,16 @@ export function DeleteThumbnail(arg1) {
   return window['go']['main']['App']['DeleteThumbnail'](arg1);
 }
 
+export function ImportSoftware(arg1) {
+  return window['go']['main']['App']['ImportSoftware'](arg1);
+}
+
 export function LoadLibrary() {
   return window['go']['main']['App']['LoadLibrary']();
+}
+
+export function LoadSoftware() {
+  return window['go']['main']['App']['LoadSoftware']();
 }
 
 export function OpenExternal(arg1) {
@@ -28,6 +36,10 @@ export function RestoreWindow() {
 
 export function SaveLibrary(arg1) {
   return window['go']['main']['App']['SaveLibrary'](arg1);
+}
+
+export function SaveSoftware(arg1) {
+  return window['go']['main']['App']['SaveSoftware'](arg1);
 }
 
 export function SteamImport(arg1) {

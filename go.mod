@@ -1,4 +1,4 @@
-module libray-game
+module softgame-library
 
 go 1.25.0
 

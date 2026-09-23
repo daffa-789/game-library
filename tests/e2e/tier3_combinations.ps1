@@ -1,6 +1,6 @@
 # ============================================================================
 # tests/e2e/tier3_combinations.ps1
-# Tier 3: Pairwise Combinations (14 tests verifying cross-feature interactions)
+# Tier 3: Pairwise Combinations (16 tests verifying cross-feature interactions)
 # ============================================================================
 
 [CmdletBinding()]
@@ -16,7 +16,7 @@ if (-not (Test-Path $UtilsPath)) {
 
 $ProjectRoot = $global:ProjectRoot
 Write-Host "`n========================================================" -ForegroundColor Cyan
-Write-Host " Running Tier 3: Cross-Feature Combinations (14 Tests)" -ForegroundColor Cyan
+Write-Host " Running Tier 3: Cross-Feature Combinations (16 Tests)" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 # T3.1: [F3 + F4] Load-Modify-Save Roundtrip
@@ -306,7 +306,7 @@ Invoke-TestCase -Id "T3.12" -Tier "3" -Feature "F3+F6" -Name "Legacy glib://thum
 # T3.13: [F1 + F2] Wails Build Configuration to Executable Output
 Invoke-TestCase -Id "T3.13" -Tier "3" -Feature "F1+F2" -Name "wails.json configuration matches generated binary output properties" -ScriptBlock {
     $wailsJson = Assert-JsonValid (Get-Content (Join-Path $ProjectRoot "wails.json") -Raw)
-    Assert-Equal "GameLibrary" $wailsJson.outputfilename "outputfilename in wails.json must be 'GameLibrary'"
+    Assert-Equal "SoftGameLibrary" $wailsJson.outputfilename "outputfilename in wails.json must be 'SoftGameLibrary'"
     Assert-Equal "1.0.0" $wailsJson.info.productVersion "productVersion must be '1.0.0'"
 }
 
@@ -315,6 +315,20 @@ Invoke-TestCase -Id "T3.14" -Tier "3" -Feature "F13+F14" -Name "Game CRUD operat
     $appGo = Get-GoSource $ProjectRoot
     Assert-False ($appGo.Contains("electron")) "Go backend must not contain any reference to Electron"
     Assert-Matches "package main" $appGo "Go backend must be standard Go main package"
+}
+
+# T3.15: [F3 + F15] Menyimpan satu katalog tidak boleh menghapus katalog lain
+Invoke-TestCase -Id "T3.15" -Tier "3" -Feature "F3+F15" -Name "Saving one catalog preserves the other catalog" -ScriptBlock {
+    $res = & go test -run "KeepsGamesIntact|KeepsSoftwareIntact" ./... 2>&1
+    Assert-True ($LASTEXITCODE -eq 0) "Cross-catalog persistence tests must pass: $res"
+}
+
+# T3.16: [F4 + F15] Satu file JSON menampung kedua katalog setelah keduanya ditulis
+Invoke-TestCase -Id "T3.16" -Tier "3" -Feature "F4+F15" -Name "library.json keeps games and software keys after both saves" -ScriptBlock {
+    $appGo = Get-GoSource $ProjectRoot
+    Assert-Matches "data\.Games = sanitized" $appGo "SaveLibrary harus mengganti slice games di objek yang sama"
+    Assert-Matches "data\.Software = sanitized" $appGo "SaveSoftware harus mengganti slice software di objek yang sama"
+    Assert-Matches "enc\.Encode\(LibraryFile\{Games: data\.Games, Software: data\.Software\}\)" $appGo "Penulisan file harus menyertakan kedua katalog"
 }
 
 Write-Host "`nTier 3 Combinations Completed.`n" -ForegroundColor Cyan

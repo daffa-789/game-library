@@ -239,7 +239,7 @@ func TestHard_LibraryNormalizesLegacyAndRejectsOversize(t *testing.T) {
 	}
 	app.mu.Lock()
 	app.libraryFinger = "stale"
-	app.libraryCache = []Game{{ID: "stale"}}
+	app.libraryCache = &LibraryData{Games: []Game{{ID: "stale"}}}
 	app.libraryCached = true
 	app.mu.Unlock()
 

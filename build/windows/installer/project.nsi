@@ -1,5 +1,5 @@
 ; =============================================================================
-;  Game Library — skrip installer NSIS (Wails v2)
+;  SoftGame Library — skrip installer NSIS (Wails v2)
 ;
 ;  Berkas ini dipakai oleh `wails build -nsis`. Nilai !define di bawah MENANG
 ;  atas default dari wails_tools.nsh, jadi nama aplikasi, nama berkas exe, dan
@@ -13,14 +13,14 @@ Unicode true
 
 ; --- Identitas produk -------------------------------------------------------
 ; INFO_PROJECTNAME menentukan default ${PRODUCT_EXECUTABLE}. Disamakan dengan
-; "outputfilename" di wails.json (GameLibrary.exe) supaya pintasan Start Menu
+; "outputfilename" di wails.json (SoftGameLibrary.exe) supaya pintasan Start Menu
 ; dan Desktop menunjuk ke berkas yang benar-benar ada.
-!define INFO_PROJECTNAME        "GameLibrary"
+!define INFO_PROJECTNAME        "SoftGameLibrary"
 !define INFO_COMPANYNAME        "Daffa"
-!define INFO_PRODUCTNAME        "Game Library"
-!define PRODUCT_EXECUTABLE      "GameLibrary.exe"
-!define UNINST_KEY_NAME         "GameLibrary"
-!define INSTALL_FOLDER_NAME     "Game Library"
+!define INFO_PRODUCTNAME        "SoftGame Library"
+!define PRODUCT_EXECUTABLE      "SoftGameLibrary.exe"
+!define UNINST_KEY_NAME         "SoftGameLibrary"
+!define INSTALL_FOLDER_NAME     "SoftGame Library"
 
 ; Instal per-pengguna: tanpa prompt UAC. Data aplikasi memang sudah berada di
 ; %APPDATA% milik pengguna yang sama. `wails build -installscope user` juga
@@ -60,16 +60,16 @@ ManifestDPIAware true
 !define MUI_HEADER_BITMAP "resources\header.bmp"
 
 !define MUI_WELCOMEPAGE_TITLE "Selamat Datang di Instalasi ${INFO_PRODUCTNAME}"
-!define MUI_WELCOMEPAGE_TEXT "Installer ini akan memasang ${INFO_PRODUCTNAME} versi ${INFO_PRODUCTVERSION} di komputer Anda.$\n$\nKatalog game (library.json) beserta thumbnail disimpan di:$\n$APPDATA\libray-game$\n$\nFolder tersebut TIDAK ikut terhapus saat uninstall, jadi koleksi Anda tetap aman.$\n$\nSilakan tutup ${INFO_PRODUCTNAME} yang sedang berjalan sebelum melanjutkan."
+!define MUI_WELCOMEPAGE_TEXT "Installer ini akan memasang ${INFO_PRODUCTNAME} versi ${INFO_PRODUCTVERSION} di komputer Anda.$\n$\nKatalog game + software (library.json) beserta thumbnail disimpan di:$\n$APPDATA\softgame-library$\n$\nFolder tersebut TIDAK ikut terhapus saat uninstall, jadi koleksi Anda tetap aman.$\n$\nPada pembuka pertama, katalog lama dari $APPDATA\libray-game dan $APPDATA\software-library otomatis diserap ke folder baru (file lama tidak dihapus).$\n$\nSilakan tutup ${INFO_PRODUCTNAME} yang sedang berjalan sebelum melanjutkan."
 
 !define MUI_DIRECTORYPAGE_TEXT_TOP "Pilih folder pemasangan. Instalasi ini bersifat per-pengguna sehingga tidak membutuhkan hak administrator."
 
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Jalankan ${INFO_PRODUCTNAME} sekarang"
 !define MUI_FINISHPAGE_RUN_CHECKED
-!define MUI_FINISHPAGE_TEXT "${INFO_PRODUCTNAME} sudah terpasang.$\n$\nBuka aplikasinya, tempel link Steam Store, lalu klik tombol Steam Link untuk mengisi data game secara otomatis."
+!define MUI_FINISHPAGE_TEXT "${INFO_PRODUCTNAME} sudah terpasang.$\n$\nBuka aplikasinya: tab Game untuk katalog game (tempel link Steam Store lalu klik Steam Link untuk mengisi data otomatis), tab Software untuk katalog aplikasi (klik Impor Situs untuk mengambil metadata dari halaman resminya)."
 
-!define MUI_UNCONFIRMPAGE_TEXT_TOP "Program akan dihapus dari folder pemasangannya. Katalog game dan thumbnail di $APPDATA\libray-game tetap dipertahankan."
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "Program akan dihapus dari folder pemasangannya. Katalog game + software dan thumbnail di $APPDATA\softgame-library tetap dipertahankan."
 
 !define MUI_ABORTWARNING
 
@@ -86,7 +86,7 @@ ManifestDPIAware true
 !insertmacro MUI_LANGUAGE "English"
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\bin\GameLibrary-Setup-${INFO_PRODUCTVERSION}-${ARCH}.exe"
+OutFile "..\..\bin\SoftGameLibrary-Setup-${INFO_PRODUCTVERSION}-${ARCH}.exe"
 InstallDir "$LOCALAPPDATA\Programs\${INSTALL_FOLDER_NAME}"
 ShowInstDetails show
 ShowUninstDetails show
@@ -113,7 +113,7 @@ Section
   !insertmacro wails.associateCustomProtocols
 
   WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${UNINST_KEY}" "Readme" "$APPDATA\libray-game"
+  WriteRegStr HKCU "${UNINST_KEY}" "Readme" "$APPDATA\softgame-library"
 
   !insertmacro wails.writeUninstaller
 SectionEnd
@@ -122,7 +122,7 @@ Section "uninstall"
   !insertmacro wails.setShellContext
 
   ; Hanya menghapus berkas data WebView2 milik aplikasi, BUKAN folder
-  ; $APPDATA\libray-game, agar katalog pengguna tidak hilang karena uninstall.
+  ; $APPDATA\softgame-library, agar katalog pengguna tidak hilang karena uninstall.
   RMDir /r "$AppData\${PRODUCT_EXECUTABLE}"
 
   RMDir /r $INSTDIR

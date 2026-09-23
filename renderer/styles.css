@@ -1,5 +1,6 @@
 /* ==========================================================================
-   Game Library — tema visual Steam, layout grid gaya Epic Games
+   SoftGame Library — tema visual Steam, layout grid gaya Epic Games.
+   Satu jendela, dua katalog (tab Game & Software).
    ========================================================================== */
 
 :root {
@@ -166,6 +167,45 @@ input, select { font-family: inherit; }
 }
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+/* ==========================================================================
+   Tab katalog (Game / Software)
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  padding: 8px 12px 6px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text-bright); }
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.tab.active .tab-count { color: var(--accent-dim); }
 
 /* ==========================================================================
    Library (grid gaya Epic)
@@ -492,6 +532,39 @@ input, select { font-family: inherit; }
 .req-empty { color: #5c6b7a; font-size: 13px; font-style: italic; }
 .req-all-empty { color: #5c6b7a; font-size: 13px; font-style: italic; padding: 4px 0; }
 
+/* Panel metadata software: satu kolom penuh (tidak ada kolom recommended). */
+.sysreq.single { grid-template-columns: 1fr; }
+
+/* ==========================================================================
+   Baris "situs resmi" di halaman detail
+   ========================================================================== */
+
+.site-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 10px;
+  min-width: 0;
+}
+.site-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex: none;
+}
+.site-link {
+  color: var(--accent);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-link:hover { text-decoration: underline; }
+
 /* ==========================================================================
    Modal
    ========================================================================== */
@@ -677,6 +750,18 @@ input, select { font-family: inherit; }
 /* ==========================================================================
    Responsif
    ========================================================================== */
+
+@media (max-width: 1180px) {
+  /* Jendela boleh sampai 980px: tab + kotak pencarian + dua tombol action
+     tidak boleh saling dorong, jadi brand dilipat lebih dulu. */
+  .brand-text { display: none; }
+  #topbar { gap: 14px; padding: 0 16px; }
+}
+
+@media (max-width: 1040px) {
+  .btn .label { display: none; }
+  .tab { padding: 8px 8px 6px; }
+}
 
 @media (max-width: 900px) {
   .hero-content { flex-direction: column; }

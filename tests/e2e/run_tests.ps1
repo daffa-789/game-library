@@ -1,7 +1,7 @@
 # ============================================================================
 # tests/e2e/run_tests.ps1
-# Master Opaque-Box E2E Test Runner for Game Library Wails v2 Migration
-# Tiers 1-4 (>= 161 tests)
+# Master Opaque-Box E2E Test Runner for SoftGame Library (katalog game + software)
+# Tiers 1-4 (>= 172 tests)
 # ============================================================================
 
 [CmdletBinding()]
@@ -46,7 +46,7 @@ $banner = @"
    GAME LIBRARY MIGRATION - E2E OPAQUE-BOX TEST HARNESS (TIERS 1-4)
 ================================================================================
  Project Root: $ProjectRoot
- Test Target : >= 161 Tests across Tiers 1-4
+ Test Target : >= 172 Tests across Tiers 1-4
  Execution   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
  Selected    : Tier $Tier $(if ($Filter) { "(Filter: '$Filter')" })
 ================================================================================

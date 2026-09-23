@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob:; font-src 'self' data:; connect-src 'self' ipc: ws: http: https:">
-  <title>Game Library</title>
+  <title>SoftGame Library</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,8 +13,20 @@
   <header id="topbar">
     <div class="brand">
       <img src="assets/logo.svg" alt="logo" draggable="false">
-      <div class="brand-text">GAME<span>LIBRARY</span></div>
+      <div class="brand-text">SOFT<span>GAME</span></div>
     </div>
+
+    <!-- Tab katalog: game tetap memakai skema lama (dengan spesifikasi),
+         software disimpan tanpa spesifikasi sama sekali. -->
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Katalog">
+      <button class="tab active" type="button" role="tab" data-tab="game" aria-selected="true">
+        Game <span class="tab-count" id="count-game"></span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="software" aria-selected="false">
+        Software <span class="tab-count" id="count-software"></span>
+      </button>
+    </nav>
+
     <div class="searchbox">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="11" cy="11" r="7"></circle><line x1="16.5" y1="16.5" x2="21" y2="21"></line>
@@ -22,18 +34,18 @@
       <input id="search" type="text" placeholder="Cari judul game...  (Ctrl+F)" autocomplete="off" spellcheck="false">
     </div>
     <div class="topbar-actions">
-      <button id="btn-steam" class="btn steam">
+      <button id="btn-import" class="btn steam">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"></path>
           <path d="M12 8v8"></path><path d="M8 12h8"></path>
         </svg>
-        Steam Link
+        <span id="btn-import-label" class="label">Steam Link</span>
       </button>
       <button id="btn-add" class="btn green">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
           <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
-        Tambah Game
+        <span id="btn-add-label" class="label">Tambah Game</span>
       </button>
     </div>
   </header>
@@ -42,13 +54,15 @@
   <main id="view-library">
     <div class="toolbar">
       <h1 id="lib-title">Semua Game <span id="lib-count"></span></h1>
+      <label class="sort-wrap hidden" id="filter-cat-wrap">
+        <span>Kategori</span>
+        <select id="filter-cat">
+          <option value="">Semua kategori</option>
+        </select>
+      </label>
       <label class="sort-wrap">
         <span>Urutkan</span>
-        <select id="sort">
-          <option value="new">Terbaru</option>
-          <option value="az">Judul A&ndash;Z</option>
-          <option value="za">Judul Z&ndash;A</option>
-        </select>
+        <select id="sort"></select>
       </label>
     </div>
     <div id="grid" class="grid"></div>
@@ -60,8 +74,8 @@
         <circle cx="49" cy="36" r="2.6" fill="#3d5a75" stroke="none"></circle>
       </svg>
       <h3 id="empty-title">Library masih kosong</h3>
-      <p id="empty-sub">Tambahkan game pertama Anda beserta link download dan spesifikasinya.</p>
-      <button id="btn-empty-add" class="btn green">+ Tambah Game Pertama</button>
+      <p id="empty-sub">Tambahkan entri pertama Anda beserta link download-nya.</p>
+      <button id="btn-empty-add" class="btn green">+ Tambah Entri Pertama</button>
     </div>
   </main>
 
@@ -71,7 +85,8 @@
   <!-- ===== MODALS ===== -->
   <div id="modal-backdrop" class="hidden"></div>
 
-  <!-- Form tambah/edit -->
+  <!-- Form tambah/edit: field dibuat dari deskriptor katalog, jadi game dan
+       software memakai satu modal yang sama. -->
   <div class="modal hidden" id="modal-form">
     <div class="modal-head">
       <h2 id="form-title">Tambah Game</h2>
@@ -82,16 +97,7 @@
       </button>
     </div>
     <div class="modal-body">
-      <div class="frow two">
-        <div class="field">
-          <label for="f-title">Judul Game *</label>
-          <input id="f-title" type="text" placeholder="mis. Grand Theft Auto V" spellcheck="false">
-        </div>
-        <div class="field">
-          <label for="f-link">Link Download (Google Drive) *</label>
-          <input id="f-link" type="text" placeholder="https://drive.google.com/file/d/..." spellcheck="false">
-        </div>
-      </div>
+      <div id="form-fields"></div>
 
       <div class="field thumb-field">
         <label>Thumbnail</label>
@@ -111,18 +117,7 @@
         </div>
       </div>
 
-      <div class="frow two">
-        <div class="field">
-          <label for="f-genre">Genre</label>
-          <input id="f-genre" type="text" placeholder="mis. Action, RPG" spellcheck="false">
-        </div>
-        <div class="field">
-          <label for="f-price">Harga</label>
-          <input id="f-price" type="text" placeholder="mis. Rp 25.000" spellcheck="false">
-        </div>
-      </div>
-
-      <div class="spec-editor">
+      <div class="spec-editor" id="form-specs">
         <div class="spec-col">
           <h3>MINIMUM</h3>
           <div id="f-spec-min"></div>
@@ -135,13 +130,13 @@
     </div>
     <div class="modal-foot">
       <button class="btn ghost" id="form-cancel">Batal</button>
-      <button class="btn green" id="form-save">Simpan Game</button>
+      <button class="btn green" id="form-save">Simpan</button>
     </div>
   </div>
 
   <!-- Konfirmasi hapus -->
   <div class="modal small hidden" id="modal-confirm">
-    <div class="modal-head"><h2>Hapus Game?</h2></div>
+    <div class="modal-head"><h2 id="confirm-title">Hapus?</h2></div>
     <div class="modal-body"><p class="hint" id="confirm-msg"></p></div>
     <div class="modal-foot">
       <button class="btn ghost" id="confirm-cancel">Batal</button>
@@ -149,11 +144,11 @@
     </div>
   </div>
 
-  <!-- Impor dari Steam -->
-  <div class="modal small hidden" id="modal-steam">
+  <!-- Impor otomatis: Steam untuk game, halaman resmi untuk software -->
+  <div class="modal small hidden" id="modal-import">
     <div class="modal-head">
-      <h2>Impor dari Steam</h2>
-      <button class="icon-btn" id="steam-close" title="Tutup">
+      <h2 id="import-title">Impor dari Steam</h2>
+      <button class="icon-btn" id="import-close" title="Tutup">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
           <line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line>
         </svg>
@@ -161,14 +156,14 @@
     </div>
     <div class="modal-body">
       <div class="field">
-        <label for="steam-url">Link halaman Steam Store</label>
-        <input id="steam-url" type="text" placeholder="https://store.steampowered.com/app/271590/" spellcheck="false" autocomplete="off">
+        <label id="import-label" for="import-url">Link halaman Steam Store</label>
+        <input id="import-url" type="text" placeholder="https://store.steampowered.com/app/271590/" spellcheck="false" autocomplete="off">
       </div>
-      <p id="steam-status" class="error-text hidden"></p>
+      <p id="import-status" class="error-text hidden"></p>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost" id="steam-cancel">Batal</button>
-      <button class="btn green" id="steam-fetch">Ambil Data Steam</button>
+      <button class="btn ghost" id="import-cancel">Batal</button>
+      <button class="btn green" id="import-fetch">Ambil Data</button>
     </div>
   </div>
 

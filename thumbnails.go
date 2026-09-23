@@ -22,15 +22,33 @@ const (
 	legacyThumbPrefix = "glib://thumb/"
 )
 
+// legacyThumbPrefixes semua skema lama yang dikenal: glib:// dari Game Library
+// lama, slib:// dari Software Library lama. Keduanya menunjuk ke file di dalam
+// folder thumbnails yang sekarang dipakai bersama.
+var legacyThumbPrefixes = []string{legacyThumbPrefix, "slib://thumb/"}
+
 // ---------------------------------------------------------------------------
 // Keamanan path
 // ---------------------------------------------------------------------------
+
+// hasKnownThumbPrefix true bila referensi memakai salah satu prefix lama,
+// sehingga perlu dinormalisasi ke /thumbnails/.
+func hasKnownThumbPrefix(ref string) bool {
+	for _, prefix := range legacyThumbPrefixes {
+		if strings.HasPrefix(ref, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // trimThumbPrefix membuang prefix referensi thumbnail dan mengembalikan nama
 // file mentah (belum divalidasi).
 func trimThumbPrefix(ref string) string {
 	ref = strings.TrimSpace(ref)
-	ref = strings.TrimPrefix(ref, legacyThumbPrefix)
+	for _, prefix := range legacyThumbPrefixes {
+		ref = strings.TrimPrefix(ref, prefix)
+	}
 	ref = strings.TrimPrefix(ref, thumbURLPrefix)
 	ref = strings.TrimPrefix(ref, "thumbnails/")
 	return ref

@@ -1,6 +1,6 @@
 # ============================================================================
 # tests/e2e/tier1_features.ps1
-# Tier 1: Feature Coverage (70 tests: 14 Features x 5 tests each)
+# Tier 1: Feature Coverage (75 tests: 15 Features, katalog game + software)
 # ============================================================================
 
 [CmdletBinding()]
@@ -17,7 +17,7 @@ if (-not (Test-Path $UtilsPath)) {
 
 $ProjectRoot = $global:ProjectRoot
 Write-Host "`n========================================================" -ForegroundColor Cyan
-Write-Host " Running Tier 1: Feature Coverage (70 Tests)" -ForegroundColor Cyan
+Write-Host " Running Tier 1: Feature Coverage (75 Tests)" -ForegroundColor Cyan
 Write-Host "========================================================`n" -ForegroundColor Cyan
 
 # ----------------------------------------------------------------------------
@@ -31,13 +31,13 @@ if ($Feature -eq 0 -or $Feature -eq 1) {
         Assert-FileExists $wailsJsonPath "wails.json must exist in project root"
         $content = Get-Content $wailsJsonPath -Raw
         $json = Assert-JsonValid $content "wails.json must parse as valid JSON"
-        Assert-True ($json.name -eq "libray-game") "wails.json name must be 'libray-game'"
+        Assert-True ($json.name -eq "softgame-library") "wails.json name must be 'softgame-library'"
     }
 
-    Invoke-TestCase -Id "T1.1.2" -Tier "1" -Feature "F1" -Name "wails.json specifies outputfilename 'GameLibrary'" -ScriptBlock {
+    Invoke-TestCase -Id "T1.1.2" -Tier "1" -Feature "F1" -Name "wails.json specifies outputfilename 'SoftGameLibrary'" -ScriptBlock {
         $wailsJsonPath = Join-Path $ProjectRoot "wails.json"
         $json = Assert-JsonValid (Get-Content $wailsJsonPath -Raw)
-        Assert-Equal "GameLibrary" $json.outputfilename "wails.json outputfilename must be 'GameLibrary'"
+        Assert-Equal "SoftGameLibrary" $json.outputfilename "wails.json outputfilename must be 'SoftGameLibrary'"
     }
 
     Invoke-TestCase -Id "T1.1.3" -Tier "1" -Feature "F1" -Name "wails.json specifies frontend:dir as 'renderer'" -ScriptBlock {
@@ -51,7 +51,7 @@ if ($Feature -eq 0 -or $Feature -eq 1) {
         $goModPath = Join-Path $ProjectRoot "go.mod"
         Assert-FileExists $goModPath "go.mod must exist in project root"
         $content = Get-Content $goModPath -Raw
-        Assert-Matches "(?m)^module\s+libray-game" $content "go.mod must declare module 'libray-game'"
+        Assert-Matches "(?m)^module\s+softgame-library" $content "go.mod must declare module 'softgame-library'"
         Assert-Matches "github\.com/wailsapp/wails/v2" $content "go.mod must require Wails v2"
     }
 
@@ -73,12 +73,12 @@ if ($Feature -eq 0 -or $Feature -eq 1) {
 if ($Feature -eq 0 -or $Feature -eq 2) {
     Write-Host "`n--- Feature 2: Executable Size & RAM Efficiency ---" -ForegroundColor Yellow
 
-    $targetBinPath = Join-Path $ProjectRoot "build\bin\GameLibrary.exe"
-    $fallbackBinPath = Join-Path $ProjectRoot "libray-game.exe"
+    $targetBinPath = Join-Path $ProjectRoot "build\bin\SoftGameLibrary.exe"
+    $fallbackBinPath = Join-Path $ProjectRoot "softgame-library.exe"
     $activeBin = if (Test-Path $targetBinPath) { $targetBinPath } elseif (Test-Path $fallbackBinPath) { $fallbackBinPath } else { $null }
 
-    Invoke-TestCase -Id "T1.2.1" -Tier "1" -Feature "F2" -Name "Target binary build/bin/GameLibrary.exe exists" -ScriptBlock {
-        Assert-FileExists $targetBinPath "Executable must be built at build\bin\GameLibrary.exe"
+    Invoke-TestCase -Id "T1.2.1" -Tier "1" -Feature "F2" -Name "Target binary build/bin/SoftGameLibrary.exe exists" -ScriptBlock {
+        Assert-FileExists $targetBinPath "Executable must be built at build\bin\SoftGameLibrary.exe"
     }
 
     Invoke-TestCase -Id "T1.2.2" -Tier "1" -Feature "F2" -Name "Binary size is strictly < 15 MB (< 15,728,640 bytes)" -ScriptBlock {
@@ -271,7 +271,7 @@ if ($Feature -eq 0 -or $Feature -eq 5) {
     Invoke-TestCase -Id "T1.5.3" -Tier "1" -Feature "F5" -Name "Corrupted library.json recovery does not throw unhandled exception" -ScriptBlock {
         $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "backup := fmt\.Sprintf\(" $appGo "Backup filename format must be implemented"
-        Assert-Matches "return \[\]Game\{\}, nil" $appGo "Corrupted file must safely return empty games list"
+        Assert-Matches "return &LibraryData\{Games: \[\]Game\{\}, Software: \[\]Software\{\}\}, nil" $appGo "Corrupted file must safely return empty games list"
     }
 
     Invoke-TestCase -Id "T1.5.4" -Tier "1" -Feature "F5" -Name "Corrupted backup suffix is formatted as millisecond timestamp" -ScriptBlock {
@@ -279,7 +279,7 @@ if ($Feature -eq 0 -or $Feature -eq 5) {
         Assert-Matches "time\.Now\(\)\.UnixMilli\(\)" $appGo "Corrupted backup must use millisecond epoch"
     }
 
-    Invoke-TestCase -Id "T1.5.5" -Tier "1" -Feature "F5" -Name "Database directory %APPDATA%\libray-game created automatically" -ScriptBlock {
+    Invoke-TestCase -Id "T1.5.5" -Tier "1" -Feature "F5" -Name "Database directory %APPDATA%\softgame-library created automatically" -ScriptBlock {
         $appGo = Get-GoSource $ProjectRoot
         Assert-Matches "os\.MkdirAll\(a\.thumbsDir,\s*0o755\)" $appGo "App initialization must create thumbnails dir"
         Assert-Matches "os\.MkdirAll\(a\.dataDir,\s*0o755\)" $appGo "App persistence must create data dir"
@@ -336,7 +336,7 @@ if ($Feature -eq 0 -or $Feature -eq 7) {
 
     Invoke-TestCase -Id "T1.7.3" -Tier "1" -Feature "F7" -Name "DeleteThumbnail trims legacy glib://thumb/ prefix" -ScriptBlock {
         $appGo = Get-GoSource $ProjectRoot
-        Assert-Matches 'strings\.TrimPrefix\(ref,\s*legacyThumbPrefix\)' $appGo "DeleteThumbnail must trim legacy glib://thumb/"
+        Assert-Matches 'strings\.TrimPrefix\(ref, prefix\)' $appGo "DeleteThumbnail must trim legacy glib://thumb/"
     }
 
     Invoke-TestCase -Id "T1.7.4" -Tier "1" -Feature "F7" -Name "DeleteThumbnail safely handles non-existent file without error" -ScriptBlock {
@@ -410,9 +410,9 @@ if ($Feature -eq 0 -or $Feature -eq 9) {
         Assert-Matches "runtime\.ClipboardSetText\(a\.ctx,\s*text\)" $appGo "CopyText must call runtime.ClipboardSetText"
     }
 
-    Invoke-TestCase -Id "T1.9.5" -Tier "1" -Feature "F9" -Name "Single instance lock is configured with com.daffa.libraygame" -ScriptBlock {
+    Invoke-TestCase -Id "T1.9.5" -Tier "1" -Feature "F9" -Name "Single instance lock is configured with com.daffa.softgamelibrary" -ScriptBlock {
         $mainGo = Get-Content (Join-Path $ProjectRoot "main.go") -Raw
-        Assert-Matches 'UniqueId:\s*"com\.daffa\.libraygame"' $mainGo "main.go must configure single instance lock UniqueId"
+        Assert-Matches 'UniqueId:\s*"com\.daffa\.softgamelibrary"' $mainGo "main.go must configure single instance lock UniqueId"
     }
 }
 
@@ -428,10 +428,10 @@ if ($Feature -eq 0 -or $Feature -eq 10) {
         Assert-FileExists $bridgePath "renderer/wails-bridge.js must exist"
     }
 
-    Invoke-TestCase -Id "T1.10.2" -Tier "1" -Feature "F10" -Name "wails-bridge.js binds all 7 API methods" -ScriptBlock {
+    Invoke-TestCase -Id "T1.10.2" -Tier "1" -Feature "F10" -Name "wails-bridge.js binds all 10 API methods" -ScriptBlock {
         Assert-FileExists $bridgePath "wails-bridge.js must exist to verify API methods"
         $bridgeCode = Get-Content $bridgePath -Raw
-        $methods = @("LoadLibrary", "SaveLibrary", "PickThumbnail", "DeleteThumbnail", "OpenExternal", "CopyText", "SteamImport")
+        $methods = @("LoadLibrary", "SaveLibrary", "PickThumbnail", "DeleteThumbnail", "OpenExternal", "CopyText", "SteamImport", "LoadSoftware", "SaveSoftware", "ImportSoftware")
         foreach ($m in $methods) {
             Assert-Matches $m $bridgeCode "wails-bridge.js must expose '$m'"
         }
@@ -656,6 +656,54 @@ if ($Feature -eq 0 -or $Feature -eq 14) {
         Assert-FileExists $readmePath "README.md must exist"
         $readme = Get-Content $readmePath -Raw
         Assert-Matches "wails\s+build" $readme "README.md must document 'wails build'"
+    }
+}
+
+# ----------------------------------------------------------------------------
+# Feature 15: Katalog Software (tab "Software") — TANPA spesifikasi sistem
+# ----------------------------------------------------------------------------
+if ($Feature -eq 0 -or $Feature -eq 15) {
+    Write-Host "`n--- Feature 15: Software Catalog (tab Software) ---" -ForegroundColor Yellow
+
+    Invoke-TestCase -Id "T1.15.1" -Tier "1" -Feature "F15" -Name "Backend exposes LoadSoftware, SaveSoftware and ImportSoftware" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches "func \(a \*App\) LoadSoftware\(\)" $appGo "LoadSoftware must be bound for the software tab"
+        Assert-Matches "func \(a \*App\) SaveSoftware\(" $appGo "SaveSoftware must be bound for the software tab"
+        Assert-Matches "func \(a \*App\) ImportSoftware\(" $appGo "ImportSoftware must be bound for the software importer"
+    }
+
+    Invoke-TestCase -Id "T1.15.2" -Tier "1" -Feature "F15" -Name "Software model carries no system specifications" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        $m = [regex]::Match($appGo, '(?s)type Software struct \{.*?\n\}')
+        Assert-True ($m.Success) "Software struct must be declared"
+        Assert-Matches 'Version\s+string\s+`json:"version"`' $m.Value "Software must keep version metadata"
+        Assert-Matches 'License\s+string\s+`json:"license"`' $m.Value "Software must keep license metadata"
+        Assert-False ($m.Value -match '(?i)requirement|specs') "Entri software tidak boleh punya field spesifikasi"
+    }
+
+    Invoke-TestCase -Id "T1.15.3" -Tier "1" -Feature "F15" -Name "One library.json stores both catalogs side by side" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'Games\s+\[\]Game\s+`json:"games"`' $appGo "LibraryFile must keep the games key"
+        Assert-Matches 'Software\s+\[\]Software\s+`json:"software"`' $appGo "LibraryFile must add the software key"
+        Assert-Matches "writeLibraryLocked\(data \*LibraryData\)" $appGo "Writes must serialise both catalogs together"
+    }
+
+    Invoke-TestCase -Id "T1.15.4" -Tier "1" -Feature "F15" -Name "Legacy Game + Software catalogs are merged on first run" -ScriptBlock {
+        $appGo = Get-GoSource $ProjectRoot
+        Assert-Matches 'legacyDataDirNames = \[\]string\{"libray-game", "software-library"\}' $appGo "Both legacy %APPDATA% folders must be absorbed"
+        Assert-Matches "func \(a \*App\) copyLegacyThumbs" $appGo "Migrated thumbnails must be copied into the shared folder"
+        $res = & go test -run TestBootstrap ./... 2>&1
+        Assert-True ($LASTEXITCODE -eq 0) "Go migration tests must pass: $res"
+    }
+
+    Invoke-TestCase -Id "T1.15.5" -Tier "1" -Feature "F15" -Name "Renderer switches catalogs through a tab bar" -ScriptBlock {
+        $html = Get-Content (Join-Path $ProjectRoot "renderer\index.html") -Raw
+        Assert-Matches 'data-tab="game"' $html "index.html must declare the Game tab"
+        Assert-Matches 'data-tab="software"' $html "index.html must declare the Software tab"
+        $appJs = Get-Content (Join-Path $ProjectRoot "renderer\app.js") -Raw
+        Assert-Matches "function setTab\(key\)" $appJs "app.js must implement tab switching"
+        Assert-Matches "window\.api\.loadSoftware\(\)" $appJs "Software catalog must load through the bridge"
+        Assert-Matches "specs: null" $appJs "Deskriptor software harus menyatakan tidak ada spesifikasi"
     }
 }
 

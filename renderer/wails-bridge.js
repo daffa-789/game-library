@@ -8,13 +8,23 @@
   window.go.main = window.go.main || {};
   window.go.main.App = window.go.main.App || {};
 
+  const call = (method, ...args) => window.go.main.App[method](...args);
+
   window.api = {
-    loadLibrary: () => window.go.main.App.LoadLibrary(),
-    saveLibrary: (games) => window.go.main.App.SaveLibrary(games),
-    pickThumbnail: () => window.go.main.App.PickThumbnail(),
-    deleteThumbnail: (ref) => window.go.main.App.DeleteThumbnail(ref),
-    openExternal: (url) => window.go.main.App.OpenExternal(url),
-    copyText: (text) => window.go.main.App.CopyText(text),
-    steamImport: (url) => window.go.main.App.SteamImport(url),
+    // Katalog game (tab "Game") — tetap punya spesifikasi sistem.
+    loadLibrary: () => call('LoadLibrary'),
+    saveLibrary: (games) => call('SaveLibrary', games),
+    steamImport: (url) => call('SteamImport', url),
+
+    // Katalog software (tab "Software") — tanpa spesifikasi.
+    loadSoftware: () => call('LoadSoftware'),
+    saveSoftware: (items) => call('SaveSoftware', items),
+    importSoftware: (url) => call('ImportSoftware', url),
+
+    // Dipakai kedua katalog.
+    pickThumbnail: () => call('PickThumbnail'),
+    deleteThumbnail: (ref) => call('DeleteThumbnail', ref),
+    openExternal: (url) => call('OpenExternal', url),
+    copyText: (text) => call('CopyText', text),
   };
 })();

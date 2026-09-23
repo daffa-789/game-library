@@ -5,13 +5,13 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "libray-game"
+    !define INFO_PROJECTNAME "softgame-library"
 !endif
 !ifndef INFO_COMPANYNAME
     !define INFO_COMPANYNAME "Daffa"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "Game Library"
+    !define INFO_PRODUCTNAME "SoftGame Library"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "1.0.0"

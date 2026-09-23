@@ -110,6 +110,66 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class Software {
+	    id: string;
+	    title: string;
+	    thumbnail: string;
+	    link: string;
+	    website: string;
+	    category: string;
+	    version: string;
+	    license: string;
+	    platform: string;
+	    size: string;
+	    price: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Software(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.thumbnail = source["thumbnail"];
+	        this.link = source["link"];
+	        this.website = source["website"];
+	        this.category = source["category"];
+	        this.version = source["version"];
+	        this.license = source["license"];
+	        this.platform = source["platform"];
+	        this.size = source["size"];
+	        this.price = source["price"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class SoftwareImportResult {
+	    title: string;
+	    thumbnail: string;
+	    category: string;
+	    version: string;
+	    license: string;
+	    platform: string;
+	    website: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SoftwareImportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.thumbnail = source["thumbnail"];
+	        this.category = source["category"];
+	        this.version = source["version"];
+	        this.license = source["license"];
+	        this.platform = source["platform"];
+	        this.website = source["website"];
+	    }
+	}
 	
 	export class SteamImportResult {
 	    appId: string;

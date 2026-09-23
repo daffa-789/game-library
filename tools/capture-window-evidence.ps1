@@ -52,9 +52,9 @@ $WS_CAPTION = 0x00C00000
 $WS_SYSMENU = 0x00080000
 $WS_MINMAX  = 0x00030000
 
-$proc = Get-Process GameLibrary -ErrorAction SilentlyContinue | Select-Object -First 1
+$proc = Get-Process SoftGameLibrary -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $proc -or $proc.MainWindowHandle -eq [IntPtr]::Zero) {
-    Write-Error "GameLibrary tidak berjalan."; exit 1
+    Write-Error "SoftGameLibrary tidak berjalan."; exit 1
 }
 $h = $proc.MainWindowHandle
 $hwnd = $h   # dipakai callback EnumWindows

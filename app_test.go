@@ -12,7 +12,7 @@ import (
 
 func setupTestApp(t *testing.T) (*App, string) {
 	t.Helper()
-	tempDir, err := os.MkdirTemp("", "libray-game-test-*")
+	tempDir, err := os.MkdirTemp("", "softgame-library-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}

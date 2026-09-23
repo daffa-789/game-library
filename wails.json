@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "libray-game",
-  "outputfilename": "GameLibrary",
+  "name": "softgame-library",
+  "outputfilename": "SoftGameLibrary",
   "frontend:dir": "renderer",
   "wailsjsdir": "./renderer",
   "version": "2",
@@ -11,9 +11,9 @@
   },
   "info": {
     "companyName": "Daffa",
-    "productName": "Game Library",
+    "productName": "SoftGame Library",
     "productVersion": "1.0.0",
     "copyright": "Copyright 2026 Daffa",
-    "comments": "Katalog game digital portabel mandiri"
+    "comments": "Katalog game & software digital portabel mandiri"
   }
 }

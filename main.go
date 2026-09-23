@@ -17,7 +17,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:             "Game Library",
+		Title:             "SoftGame Library",
 		Width:             windowWidth,
 		Height:            windowHeight,
 		MinWidth:          windowMinWidth,
@@ -37,7 +37,7 @@ func main() {
 			app,
 		},
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "com.daffa.libraygame",
+			UniqueId: "com.daffa.softgamelibrary",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
 				app.RestoreWindow()
 			},

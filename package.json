@@ -1,15 +1,15 @@
 {
-  "name": "libray-game",
-  "productName": "Game Library",
+  "name": "softgame-library",
+  "productName": "SoftGame Library",
   "version": "1.0.0",
-  "description": "Katalog game digital: cari game, cek spesifikasi, salin link download untuk pelanggan",
+  "description": "Katalog digital dalam dua tab: game (dengan spesifikasi & impor Steam) dan software (tanpa spesifikasi)",
   "license": "MIT",
   "author": "Daffa",
   "scripts": {
     "dev": "wails dev",
     "test": "go test ./...",
     "assets:installer": "go run ./tools/gen-installer-images",
-    "build": "wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o GameLibrary.exe",
-    "installer": "go run ./tools/gen-installer-images && wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o GameLibrary.exe -nsis -installscope user"
+    "build": "wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o SoftGameLibrary.exe",
+    "installer": "go run ./tools/gen-installer-images && wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o SoftGameLibrary.exe -nsis -installscope user"
   }
 }

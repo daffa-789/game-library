@@ -1,8 +1,8 @@
-# Game Library
+# SoftGame Library
 
 A lightweight, portable digital game catalog application built with **Wails v2** (Go + Microsoft Edge WebView2) and modern vanilla web technologies (HTML5, CSS3, ES6).
 
-Game Library allows users to manage their game collection, view system requirements, auto-import game metadata from the Steam Store API, manage thumbnails locally, and quickly share or open download links (Google Drive).
+SoftGame Library allows users to manage their game dan software catalog, view system requirements, auto-import game metadata from the Steam Store API, manage thumbnails locally, and quickly share or open download links (Google Drive).
 
 ---
 
@@ -10,7 +10,7 @@ Game Library allows users to manage their game collection, view system requireme
 
 - **Backend**: Go 1.23+ powered by **Wails v2.16.0**
   - High performance, minimal memory footprint (~30–50 MB RAM vs ~150–200 MB in Electron).
-  - Native Windows single-instance mutex (`com.daffa.libraygame`) focusing existing window on subsequent launches.
+  - Native Windows single-instance mutex (`com.daffa.softgamelibrary`) focusing existing window on subsequent launches.
   - Native runtime integration for file picker dialogs, system clipboard, and default browser launching.
   - Custom dynamic asset handler (`AssetServer.Handler`) serving local thumbnails securely from AppData.
 - **Frontend**: Vanilla HTML5, CSS3, and JavaScript (ES6) in `renderer/`
@@ -22,7 +22,7 @@ Game Library allows users to manage their game collection, view system requireme
   - Lightweight bridge shim (`wails-bridge.js`) interfacing UI events seamlessly with Go backend bindings.
   - Zero npm dependencies, bundlers, or heavy frontend frameworks.
 - **Output**:
-  - Portable standalone executable: `build/bin/GameLibrary.exe` (~11.4 MB, below the 15 MB budget).
+  - Portable standalone executable: `build/bin/SoftGameLibrary.exe` (~11.4 MB, below the 15 MB budget).
   - Windows installer: `build/bin/GameLibrary-Setup-<version>-amd64.exe` (~5.3 MB, LZMA, per-user install, Indonesian UI).
 
 ---
@@ -35,7 +35,7 @@ Game Library allows users to manage their game collection, view system requireme
    - Parses minimum and recommended system requirements (OS, CPU, RAM, GPU, DirectX, Network, Storage, Sound, Notes).
    - Automatically downloads and caches official Steam header banner images as local thumbnails.
 
-2. **Full Game Library Management (CRUD)**:
+2. **Full SoftGame Library Management (CRUD)**:
    - Add, edit, and delete game entries with comprehensive details.
    - Real-time title search and multi-criteria sorting (Terbaru, A-Z, Z-A).
    - Form input validation preventing invalid entries.
@@ -76,10 +76,10 @@ Game Library allows users to manage their game collection, view system requireme
 
 ## Data Persistence Locations
 
-Game Library stores all user data in standard Windows Application Data directories:
+SoftGame Library stores all user data in standard Windows Application Data directories:
 
-- **Database**: `%APPDATA%\libray-game\library.json`
-- **Cached Thumbnails**: `%APPDATA%\libray-game\thumbnails\`
+- **Database**: `%APPDATA%\softgame-library\library.json`
+- **Cached Thumbnails**: `%APPDATA%\softgame-library\thumbnails\`
 
 Legacy thumbnail references (from prior Electron versions using `glib://thumb/*`) are automatically normalized to `/thumbnails/*` upon load.
 
@@ -108,12 +108,12 @@ To produce an optimized, standalone Windows 64-bit portable executable:
 $env:PATH = "C:\Program Files\Go\bin;C:\Users\Daffa\go\bin;" + $env:PATH
 
 # Compile with stripped symbols and trimmed paths
-wails build -clean -ldflags "-s -w" -trimpath -o GameLibrary.exe
+wails build -clean -ldflags "-s -w" -trimpath -o SoftGameLibrary.exe
 ```
 
 The resulting binary will be output to:
 ```
-build/bin/GameLibrary.exe
+build/bin/SoftGameLibrary.exe
 ```
 
 ### Build Verification & Metrics
@@ -143,7 +143,7 @@ $env:PATH = "C:\Program Files\Go\bin;C:\Users\Daffa\go\bin;C:\Program Files (x86
 
 npm run installer
 # sama dengan:
-wails build -clean -platform windows/amd64 -trimpath -ldflags "-s -w" -o GameLibrary.exe -nsis -installscope user
+wails build -clean -platform windows/amd64 -trimpath -ldflags "-s -w" -o SoftGameLibrary.exe -nsis -installscope user
 ```
 
 Output:
@@ -159,12 +159,12 @@ Installer behaviour (defined in `build/windows/installer/project.nsi`):
   generated from `build/appicon.png` by `go run ./tools/gen-installer-images`
   (also wired into `npm run installer` and available as `npm run assets:installer`).
   NSIS rejects other formats/sizes, so regenerate after changing the app icon.
-- **Per-user install** (`%LOCALAPPDATA%\Programs\Game Library`) — no UAC prompt.
+- **Per-user install** (`%LOCALAPPDATA%\Programs\SoftGame Library`) — no UAC prompt.
 - Registers in *Apps & features* / `HKCU\...\Uninstall\GameLibrary`, creates Start
-  Menu and Desktop shortcuts, and offers "Jalankan Game Library sekarang".
+  Menu and Desktop shortcuts, and offers "Jalankan SoftGame Library sekarang".
 - Installs the WebView2 Runtime automatically when the system lacks it.
 - Uninstall removes program files and shortcuts but **keeps** the catalog in
-  `%APPDATA%\libray-game`, so a reinstall restores the collection.
+  `%APPDATA%\softgame-library`, so a reinstall restores the collection.
 - LZMA solid compression (~5.3 MB for a 11.4 MB executable).
 
 Silent install / uninstall for testing:
@@ -219,7 +219,7 @@ c:\Users\Daffa\Desktop\Libray Game\
 ├── package.json           # Project metadata & build scripts (dev/test/build/installer)
 ├── build/
 │   ├── appicon.png        # Source application icon
-│   ├── bin/               # GameLibrary.exe + GameLibrary-Setup-<ver>-amd64.exe (gitignored)
+│   ├── bin/               # SoftGameLibrary.exe + GameLibrary-Setup-<ver>-amd64.exe (gitignored)
 │   └── windows/
 │       ├── icon.ico       # Windows application icon
 │       ├── info.json      # Executable metadata configuration

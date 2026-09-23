@@ -149,7 +149,7 @@ func (a *App) newRequest(method, endpoint string, timeout time.Duration) (*http.
 		cancel()
 		return nil, func() {}, err
 	}
-	req.Header.Set("User-Agent", steamUserAgent)
+	req.Header.Set("User-Agent", importUserAgent)
 	return req, cancel, nil
 }
 

@@ -1,6 +1,6 @@
 # ============================================================================
 # tests/e2e/test_utils.ps1
-# Opaque-Box Test Utilities & Assertions for Game Library E2E Test Suite
+# Opaque-Box Test Utilities & Assertions for SoftGame Library E2E Test Suite
 # ============================================================================
 
 $global:ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
@@ -346,7 +346,7 @@ function Get-PeBinaryInfo {
 function New-TestSandbox {
     $tempBase = [System.IO.Path]::GetTempPath()
     $guid = [System.Guid]::NewGuid().ToString("N")
-    $sandboxPath = Join-Path $tempBase "libray-game-test-$guid"
+    $sandboxPath = Join-Path $tempBase "softgame-library-test-$guid"
     $thumbsPath = Join-Path $sandboxPath "thumbnails"
 
     $null = New-Item -ItemType Directory -Path $sandboxPath -Force
