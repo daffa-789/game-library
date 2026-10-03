@@ -12,3 +12,5 @@ Thumbs.db
 *.exe
 build/windows/installer/tmp/
 build/bukti-*.png
+.workbuddy-ai/
+

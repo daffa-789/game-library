@@ -215,6 +215,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class SteamSearchResult {
+	    appId: string;
+	    title: string;
+	    thumbnail: string;
+	    price: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SteamSearchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.appId = source["appId"];
+	        this.title = source["title"];
+	        this.thumbnail = source["thumbnail"];
+	        this.price = source["price"];
+	    }
+	}
 
 }
 

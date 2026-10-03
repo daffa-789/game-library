@@ -112,7 +112,10 @@
               </svg>
               Pilih Gambar dari Komputer&hellip;
             </button>
-            <button id="f-thumb-clear" class="btn ghost small">Hapus Gambar</button>
+            <div class="thumb-mini">
+              <button id="f-thumb-save" class="btn ghost small" disabled>Simpan Gambar</button>
+              <button id="f-thumb-clear" class="btn ghost small">Hapus Gambar</button>
+            </div>
           </div>
         </div>
       </div>
@@ -159,9 +162,14 @@
         <label id="import-label" for="import-url">Link halaman Steam Store</label>
         <input id="import-url" type="text" placeholder="https://store.steampowered.com/app/271590/" spellcheck="false" autocomplete="off">
       </div>
+      <p id="import-hint" class="import-hint hidden">
+        Tempel link Steam Store, atau ketik <strong>nama game</strong> lalu tekan Cari untuk menemukan judul yang baru rilis.
+      </p>
+      <div id="import-results" class="import-results hidden"></div>
       <p id="import-status" class="error-text hidden"></p>
     </div>
     <div class="modal-foot">
+      <button class="btn ghost" id="import-search">Cari</button>
       <button class="btn ghost" id="import-cancel">Batal</button>
       <button class="btn green" id="import-fetch">Ambil Data</button>
     </div>

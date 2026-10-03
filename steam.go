@@ -23,7 +23,14 @@ import (
 const maxSteamResponseBytes = 8 << 20 // 8 MiB jauh di atas ukuran appdetails
 
 var (
-	steamURLRe = regexp.MustCompile(`store\.steampowered\.com/app/(\d+)`)
+	// steamURLRe menerima bentuk link Steam Store yang umum dipakai orang:
+	//   https://store.steampowered.com/app/1636440
+	//   https://store.steampowered.com/app/1636440/SILENT_HILL_Townfall/
+	//   https://store.steampowered.com/app/1636440?snr=1_7_7_151_150_1
+	//   store.steampowered.com/app/1636440/  (tanpa skema)
+	// Tanda "/" setelah angka tidak diwajibkan, supaya link tanpa slug tetap
+	// kebaca. Host boleh punya subdomain lain (mis. regional store).
+	steamURLRe = regexp.MustCompile(`(?i)(?:store\.steampowered\.com|steampowered\.com)/app/(\d+)`)
 	steamLiRe  = regexp.MustCompile(`(?i)<li[^>]*>\s*<strong[^>]*>\s*([^:<>]+?)\s*:?\s*</strong>([\s\S]*?)</li>`)
 	// Steam kadang menulis system requirement sebagai <h4><strong>OS:</strong>
 	// Windows 10</h4>, bukan <li>. Dipakai sebagai cadangan per label.
@@ -45,14 +52,64 @@ var (
 	steamImageHostSuffixes = []string{"steampowered.com", "steamstatic.com", "steamcommunity.com"}
 )
 
-func (a *App) SteamImport(urlStr string) (*SteamImportResult, error) {
-	m := steamURLRe.FindStringSubmatch(urlStr)
-	if len(m) < 2 {
-		return nil, fmt.Errorf("Link tidak dikenali. Gunakan link seperti https://store.steampowered.com/app/271590/")
-	}
-	appID := m[1]
+// steamDetailsEntry satu nilai di dalam objek respons appdetails. Key objeknya
+// adalah appid yang diminta, tapi Steam kadang memakai id internal yang berbeda
+// (lihat catatan di SteamImport), jadi key tidak boleh dijadikan satu-satunya
+// cara menemukan entri.
+type steamDetailsEntry struct {
+	Success bool            `json:"success"`
+	Data    json.RawMessage `json:"data"`
+}
 
-	apiURL := fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%s&l=english", appID)
+// singleSteamEntry mengambil satu-satunya entri dari respons appdetails apa pun
+// key-nya. Request kita selalu meminta tepat satu appid, jadi entry tunggal
+// yang ada di respons pasti milik appid itu — walau key JSON-nya lain.
+// Iterasi map sengaja tidak kita buat deterministik: kalau ada lebih dari satu
+// entri, kita tidak menebak-nebak dan mengembalikan false.
+func singleSteamEntry(root map[string]steamDetailsEntry) (steamDetailsEntry, bool) {
+	if len(root) != 1 {
+		return steamDetailsEntry{}, false
+	}
+	for _, entry := range root {
+		return entry, true
+	}
+	return steamDetailsEntry{}, false
+}
+
+// ---------------------------------------------------------------------------
+// Pencarian Steam: menyelesaikan nama game / link non-app menjadi appid
+// ---------------------------------------------------------------------------
+
+// maxSteamSearchResults batas hasil yang dikembalikan ke UI.
+const maxSteamSearchResults = 25
+
+// SteamSearchResult satu kandidat hasil pencarian Steam Store.
+type SteamSearchResult struct {
+	AppID     string `json:"appId"`
+	Title     string `json:"title"`
+	Thumbnail string `json:"thumbnail"`
+	Price     string `json:"price"`
+}
+
+// SteamSearch mencari game di katalog Steam Store berdasarkan kata kunci.
+// Dipakai supaya game yang baru rilis tetap bisa ditemukan tanpa harus tahu
+// appid-nya lebih dulu; setelah user memilih, alur lanjut ke SteamImport.
+func (a *App) SteamSearch(term string) ([]SteamSearchResult, error) {
+	query := strings.TrimSpace(term)
+	if query == "" {
+		return nil, fmt.Errorf("Kata kunci pencarian belum diisi.")
+	}
+	if utf8.RuneCountInString(query) > 120 {
+		return nil, fmt.Errorf("Kata kunci terlalu panjang.")
+	}
+
+	apiURL := "https://store.steampowered.com/api/storesearch/?" +
+		url.Values{
+			"term": {query},
+			"l":    {"english"},
+			"cc":   {steamStoreRegion},
+		}.Encode()
+
 	req, cancel, err := a.newRequest(http.MethodGet, apiURL, steamAPITimeout)
 	if err != nil {
 		return nil, err
@@ -70,36 +127,68 @@ func (a *App) SteamImport(urlStr string) (*SteamImportResult, error) {
 		return nil, fmt.Errorf("Gagal menghubungi Steam Store (HTTP %d)", res.StatusCode)
 	}
 
-	var root map[string]struct {
-		Success bool            `json:"success"`
-		Data    json.RawMessage `json:"data"`
+	var payload struct {
+		Items []struct {
+			Type string      `json:"type"`
+			ID   json.Number `json:"id"`
+			Name string      `json:"name"`
+			// tiny_image dipakai sebagai thumbnail kandidat: kandidat hasil
+			// pencarian tidak perlu mengunduh gambar ke disk, cukup URL-nya.
+			TinyImage string `json:"tiny_image"`
+			Price     struct {
+				FinalFormatted string `json:"final_formatted"`
+			} `json:"price"`
+		} `json:"items"`
 	}
-	if err := json.NewDecoder(io.LimitReader(res.Body, maxSteamResponseBytes)).Decode(&root); err != nil {
-		return nil, fmt.Errorf("Gagal membaca respons Steam: %w", err)
+	if err := json.NewDecoder(io.LimitReader(res.Body, maxSteamResponseBytes)).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("Gagal membaca hasil pencarian Steam: %w", err)
 	}
 
-	entry, ok := root[appID]
-	if !ok || !entry.Success || len(entry.Data) == 0 {
-		return nil, fmt.Errorf("Data game tidak ditemukan di Steam. Cek lagi link-nya.")
+	out := make([]SteamSearchResult, 0, len(payload.Items))
+	for _, it := range payload.Items {
+		// Hanya "app" yang bisa dibuka appdetails — skip bundle/package/dlc
+		// yang tipenya lain supaya user tidak diarahkan ke alur buntu.
+		if it.Type != "" && it.Type != "app" {
+			continue
+		}
+		id := it.ID.String()
+		if id == "" || id == "0" || strings.TrimSpace(it.Name) == "" {
+			continue
+		}
+		out = append(out, SteamSearchResult{
+			AppID:     id,
+			Title:     truncateUTF8(strings.TrimSpace(it.Name), maxLenTitle),
+			Thumbnail: it.TinyImage,
+			Price:     strings.TrimSpace(it.Price.FinalFormatted),
+		})
+		if len(out) >= maxSteamSearchResults {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("Game \"%s\" tidak ditemukan di Steam. Coba kata kunci lain.", query)
+	}
+	return out, nil
+}
+
+func (a *App) SteamImport(urlStr string) (*SteamImportResult, error) {
+	m := steamURLRe.FindStringSubmatch(urlStr)
+	if len(m) < 2 {
+		return nil, fmt.Errorf("Link tidak dikenali. Gunakan link seperti https://store.steampowered.com/app/271590/")
+	}
+	appID := m[1]
+
+	detail, err := a.fetchSteamDetails(appID)
+	if err != nil {
+		return nil, err
 	}
 
-	var detail struct {
-		Name           string          `json:"name"`
-		HeaderImage    string          `json:"header_image"`
-		PCRequirements json.RawMessage `json:"pc_requirements"`
-		Genres         []struct {
-			Description string `json:"description"`
-		} `json:"genres"`
-		Developers  []string `json:"developers"`
-		ReleaseDate struct {
-			Date string `json:"date"`
-		} `json:"release_date"`
-		PriceOverview struct {
-			FinalFormatted string `json:"final_formatted"`
-		} `json:"price_overview"`
-	}
-	if err := json.Unmarshal(entry.Data, &detail); err != nil {
-		return nil, fmt.Errorf("Format data Steam tidak dikenali: %w", err)
+	// Payload membawa steam_appid sendiri. Kalau ada, itulah id yang benar
+	// untuk disimpan (bisa berbeda dari appid di link, mis. link lama/redirect).
+	// Kalau tidak ada, pakai appid dari link.
+	resolvedID := appID
+	if id := detail.SteamAppID.String(); id != "" && id != "0" {
+		resolvedID = id
 	}
 
 	// pc_requirements bisa berupa object atau array kosong [] (sering terjadi).
@@ -123,7 +212,7 @@ func (a *App) SteamImport(urlStr string) (*SteamImportResult, error) {
 	}
 
 	result := &SteamImportResult{
-		AppID:       appID,
+		AppID:       resolvedID,
 		Title:       detail.Name,
 		Genre:       strings.Join(genres, ", "),
 		Developer:   strings.Join(detail.Developers, ", "),
@@ -133,10 +222,108 @@ func (a *App) SteamImport(urlStr string) (*SteamImportResult, error) {
 	}
 
 	if detail.HeaderImage != "" {
-		result.Thumbnail = a.downloadSteamImage(appID, detail.HeaderImage)
+		result.Thumbnail = a.downloadSteamImage(resolvedID, detail.HeaderImage)
 	}
 
 	return result, nil
+}
+
+// steamDetail adalah field appdetails yang kita pakai. Dipisah jadi type
+// tersendiri supaya fetchSteamDetails bisa dipakai ulang untuk fallback region.
+type steamDetail struct {
+	SteamAppID     json.Number     `json:"steam_appid"`
+	Name           string          `json:"name"`
+	HeaderImage    string          `json:"header_image"`
+	PCRequirements json.RawMessage `json:"pc_requirements"`
+	Genres         []struct {
+		Description string `json:"description"`
+	} `json:"genres"`
+	Developers  []string `json:"developers"`
+	ReleaseDate struct {
+		Date string `json:"date"`
+	} `json:"release_date"`
+	PriceOverview struct {
+		FinalFormatted string `json:"final_formatted"`
+	} `json:"price_overview"`
+}
+
+// fetchSteamDetails mengambil detail satu game dari appdetails. Region store
+// dikirim agar harga cocok dengan negara user; kalau region itu tidak punya
+// harga (beberapa judul regional-restricted), sekali lagi dicoba tanpa cc
+// supaya impor tetap menghasilkan data selengkap mungkin.
+func (a *App) fetchSteamDetails(appID string) (steamDetail, error) {
+	detail, err := a.requestSteamDetails(appID, steamStoreRegion)
+	if err == nil && detail.PriceOverview.FinalFormatted != "" {
+		return detail, nil
+	}
+
+	// Coba lagi dengan region global (tanpa cc) bila percobaan pertama gagal
+	// atau tidak membawa harga.
+	fallback, fbErr := a.requestSteamDetails(appID, "")
+	if fbErr != nil {
+		// Kalau percobaan pertama sudah berhasil (hanya tanpa harga), tetap
+		// pakai itu — impor tanpa harga lebih baik daripada gagal total.
+		if err == nil {
+			return detail, nil
+		}
+		return steamDetail{}, err
+	}
+	if err == nil && fallback.PriceOverview.FinalFormatted == "" {
+		return detail, nil // hasil pertama lebih lengkap (punya harga region)
+	}
+	return fallback, nil
+}
+
+// requestSteamDetails satu panggilan appdetails untuk satu appid dan satu
+// region ("" berarti pakai region default Steam).
+func (a *App) requestSteamDetails(appID, region string) (steamDetail, error) {
+	params := url.Values{"appids": {appID}, "l": {"english"}}
+	if region != "" {
+		params.Set("cc", region)
+	}
+	apiURL := "https://store.steampowered.com/api/appdetails?" + params.Encode()
+
+	req, cancel, err := a.newRequest(http.MethodGet, apiURL, steamAPITimeout)
+	if err != nil {
+		return steamDetail{}, err
+	}
+	defer cancel()
+	req.Header.Set("Accept", "application/json")
+
+	res, err := a.client.Do(req)
+	if err != nil {
+		return steamDetail{}, fmt.Errorf("Gagal menghubungi Steam Store: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return steamDetail{}, fmt.Errorf("Gagal menghubungi Steam Store (HTTP %d)", res.StatusCode)
+	}
+
+	var root map[string]steamDetailsEntry
+	if err := json.NewDecoder(io.LimitReader(res.Body, maxSteamResponseBytes)).Decode(&root); err != nil {
+		return steamDetail{}, fmt.Errorf("Gagal membaca respons Steam: %w", err)
+	}
+
+	// Steam tidak selalu mengembalikan data di bawah key = appid yang diminta.
+	// Contoh nyata: appdetails?appids=1636440 (SILENT HILL: Townfall) menjawab
+	// key "5124800", dan appids=570 (Dota 2) menjawab key "2120612". Isi
+	// payload-nya tetap benar, hanya key JSON-nya yang memakai id internal.
+	// Jadi urutannya: coba key yang diminta lebih dulu (perilaku lama tetap
+	// jalan + kompatibel dengan test), baru jatuh ke entry tunggal apa pun.
+	entry, ok := root[appID]
+	if !ok {
+		entry, ok = singleSteamEntry(root)
+	}
+	if !ok || !entry.Success || len(entry.Data) == 0 {
+		return steamDetail{}, fmt.Errorf("Data game tidak ditemukan di Steam. Cek lagi link-nya.")
+	}
+
+	var detail steamDetail
+	if err := json.Unmarshal(entry.Data, &detail); err != nil {
+		return steamDetail{}, fmt.Errorf("Format data Steam tidak dikenali: %w", err)
+	}
+	return detail, nil
 }
 
 // newRequest membangun request dengan deadline: context jendela Wails (kalau
@@ -191,10 +378,12 @@ func (a *App) downloadSteamImage(appID, imgURL string) string {
 	if err != nil {
 		return ""
 	}
-	defer out.Close()
 
-	written, err := io.Copy(out, io.LimitReader(res.Body, maxThumbnailBytes+1))
-	if err != nil || written == 0 || written > maxThumbnailBytes {
+	written, copyErr := io.Copy(out, io.LimitReader(res.Body, maxThumbnailBytes+1))
+	// Handle harus ditutup sebelum Remove: Windows menolak menghapus file yang
+	// masih terbuka, dan sisa unduhan gagal akan tertinggal selamanya.
+	closeErr := out.Close()
+	if copyErr != nil || closeErr != nil || written == 0 || written > maxThumbnailBytes {
 		_ = os.Remove(dest)
 		return ""
 	}

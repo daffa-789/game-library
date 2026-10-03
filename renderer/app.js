@@ -57,6 +57,7 @@ const COPY_ICON = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" s
 const LINK_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
 const TRASH_ICON = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
 const EXTERNAL_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>`;
+const SAVE_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
 
 /* ==========================================================================
    Deskriptor katalog — satu-satunya tempat perbedaan Game vs Software
@@ -718,6 +719,10 @@ function renderDetail() {
         ${site ? '<div class="site-row"><span class="site-label">Situs resmi</span>' +
           '<a class="site-link" id="d-site" data-action="site" href="#" rel="noreferrer"></a></div>' : ''}
         <div class="detail-actions">
+          <button class="btn ghost" id="d-save-img" data-action="save-img">
+            ${SAVE_ICON}
+            Simpan Gambar
+          </button>
           <button class="btn ghost" id="d-edit" data-action="edit">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"></path></svg>
             Edit
@@ -744,6 +749,7 @@ function renderDetail() {
   dlLink.textContent = txt(item.link) ? item.link : '— belum ada link —';
   dlLink.title = txt(item.link);
   hero.querySelector('#d-open').disabled = !item.link;
+  hero.querySelector('#d-save-img').disabled = !isStoredThumb(txt(item.thumbnail));
 
   if (site) {
     const el = hero.querySelector('#d-site');
@@ -827,8 +833,27 @@ function fillSpecInputs(specs) {
   }
 }
 
+// Preview dan tombol "Simpan Gambar" mengikuti gambar yang sedang terpasang
+// di form.
 function updateThumbPreview() {
-  $('#f-thumb-preview').src = dflt(ui().pendingThumb, PLACEHOLDER_IMG);
+  const ref = txt(ui().pendingThumb);
+  $('#f-thumb-preview').src = dflt(ref, PLACEHOLDER_IMG);
+  $('#f-thumb-save').disabled = !isStoredThumb(ref);
+}
+
+// Menyalin gambar entri ke folder pilihan user lewat dialog Simpan Sebagai.
+// Dipakai form (gambar yang sedang terpasang) dan halaman detail.
+async function saveThumbImage(ref, title) {
+  if (!isStoredThumb(ref)) {
+    toast('Entri ini belum punya gambar tersimpan', true);
+    return;
+  }
+  try {
+    const dest = await window.api.saveThumbnail(ref, title);
+    if (dest) toast('Gambar disimpan');
+  } catch (err) {
+    toast((err && err.message) ? err.message : 'Gagal menyimpan gambar', true);
+  }
 }
 
 function clearInvalid() {
@@ -876,9 +901,15 @@ function openForm(item, prefill) {
   setTimeout(() => $(adding && prefill ? '#f-link' : '#f-title').focus(), 50);
 }
 
+// Hanya referensi gambar yang benar-benar tersimpan di folder aplikasi yang
+// boleh dihapus atau diekspor: URL luar dan placeholder bukan file kita.
+function isStoredThumb(ref) {
+  return !!ref && (ref.startsWith('/thumbnails/') || ref.startsWith('glib://') || ref.startsWith('slib://'));
+}
+
 // Hapus file thumbnail lama tanpa menunggu (api delete bersifat idempoten).
 function dropThumbFile(ref) {
-  if (ref && (ref.startsWith('/thumbnails/') || ref.startsWith('glib://') || ref.startsWith('slib://'))) {
+  if (isStoredThumb(ref)) {
     Promise.resolve(window.api.deleteThumbnail(ref)).catch(() => {});
   }
 }
@@ -983,6 +1014,12 @@ function openImportModal() {
   const status = $('#import-status');
   status.classList.add('hidden');
   status.textContent = '';
+  clearImportResults();
+  // Petunjuk + tombol Cari hanya relevan untuk Steam (game), yang punya
+  // endpoint pencarian. Impor software dari situs tetap satu langkah.
+  const isSteam = conf.run === CATALOGS.game.import.run;
+  toggleHidden($('#import-hint'), !isSteam);
+  toggleHidden($('#import-search'), !isSteam);
   const btn = $('#import-fetch');
   btn.disabled = false;
   btn.textContent = conf.fetchLabel;
@@ -990,21 +1027,129 @@ function openImportModal() {
   setTimeout(() => urlEl.focus(), 50);
 }
 
-async function fetchImport() {
-  const def = cur();
-  const conf = def.import;
-  const url = $('#import-url').value.trim();
+function toggleHidden(el, hide) {
+  if (el) el.classList.toggle('hidden', !!hide);
+}
+
+function clearImportResults() {
+  const box = $('#import-results');
+  if (!box) return;
+  box.textContent = '';
+  box.classList.add('hidden');
+}
+
+function showImportStatus(msg) {
   const status = $('#import-status');
+  status.textContent = msg;
+  status.classList.remove('hidden');
+}
+
+// renderImportResults menggambar daftar kandidat hasil pencarian Steam.
+// Klik salah satu → langsung ambil detail game itu lewat alur impor biasa.
+function renderImportResults(items) {
+  const box = $('#import-results');
+  box.textContent = '';
+  items.forEach((it) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'import-result';
+    row.dataset.appid = it.appId;
+
+    if (it.thumbnail) {
+      const img = document.createElement('img');
+      img.src = it.thumbnail;
+      img.alt = '';
+      img.loading = 'lazy';
+      row.appendChild(img);
+    }
+
+    const body = document.createElement('span');
+    body.className = 'ir-body';
+    const title = document.createElement('span');
+    title.className = 'ir-title';
+    title.textContent = it.title;
+    const meta = document.createElement('span');
+    meta.className = 'ir-meta';
+    meta.textContent = `AppID ${it.appId}`;
+    body.appendChild(title);
+    body.appendChild(meta);
+    row.appendChild(body);
+
+    if (it.price) {
+      const price = document.createElement('span');
+      price.className = 'ir-price';
+      price.textContent = it.price;
+      row.appendChild(price);
+    }
+    box.appendChild(row);
+  });
+  toggleHidden(box, items.length === 0);
+}
+
+// fetchSteamSearch mencari game berdasarkan kata kunci lalu menampilkan
+// hasilnya. Ini jalur utama untuk game baru rilis yang appid-nya belum
+// diketahui user.
+async function fetchSteamSearch() {
+  const term = $('#import-url').value.trim();
+  const btn = $('#import-search');
+  if (!term) {
+    showImportStatus('Ketik nama game dulu untuk dicari.');
+    return;
+  }
+  clearImportResults();
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Mencari...';
+  try {
+    const items = await window.api.steamSearch(term);
+    renderImportResults(items);
+    if (!items.length) showImportStatus('Tidak ada hasil. Coba kata kunci lain.');
+    else $('#import-status').classList.add('hidden');
+  } catch (err) {
+    showImportStatus((err && err.message) ? err.message : 'Pencarian gagal. Coba lagi.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// importByAppID menjalankan impor untuk appid terpilih dari daftar hasil cari.
+async function importByAppID(appId) {
+  const conf = cur().import;
+  const btn = $('#import-fetch');
+  btn.disabled = true;
+  btn.textContent = 'Mengambil...';
+  try {
+    const result = await conf.run(`https://store.steampowered.com/app/${appId}/`);
+    closeModal();
+    openForm(null, result);
+    toast(conf.okToast);
+  } catch (err) {
+    showImportStatus((err && err.message) ? err.message : conf.failToast);
+    btn.disabled = false;
+    btn.textContent = conf.fetchLabel;
+  }
+}
+
+async function fetchImport() {
+  const conf = cur().import;
+  const url = $('#import-url').value.trim();
   const btn = $('#import-fetch');
   if (!url) {
-    status.textContent = conf.needUrl;
-    status.classList.remove('hidden');
+    showImportStatus(conf.needUrl);
     return;
+  }
+
+  // Kalau input bukan link (mis. user mengetik nama game), arahkan ke
+  // pencarian — bukan error "link tidak dikenali".
+  const looksLikeURL = /^https?:\/\//i.test(url) || /steampowered\.com/i.test(url);
+  if (!looksLikeURL && conf.run === CATALOGS.game.import.run) {
+    return fetchSteamSearch();
   }
 
   btn.disabled = true;
   btn.textContent = 'Mengambil...';
-  status.classList.add('hidden');
+  $('#import-status').classList.add('hidden');
 
   try {
     const result = await conf.run(url);
@@ -1012,8 +1157,7 @@ async function fetchImport() {
     openForm(null, result);
     toast(conf.okToast);
   } catch (err) {
-    status.textContent = (err && err.message) ? err.message : conf.failToast;
-    status.classList.remove('hidden');
+    showImportStatus((err && err.message) ? err.message : conf.failToast);
     btn.disabled = false;
     btn.textContent = conf.fetchLabel;
   }
@@ -1084,6 +1228,7 @@ function bindEvents() {
       case 'copy': copyLink(active, item.id); break;
       case 'open': if (item.link) window.api.openExternal(item.link); break;
       case 'edit': openForm(item); break;
+      case 'save-img': saveThumbImage(item.thumbnail, item.title); break;
       case 'delete': askDelete(item.id); break;
     }
   });
@@ -1113,6 +1258,9 @@ function bindEvents() {
       toast('Gagal memuat gambar', true);
     }
   });
+  $('#f-thumb-save').addEventListener('click', () => {
+    saveThumbImage(ui().pendingThumb, $('#f-title').value);
+  });
   $('#f-thumb-clear').addEventListener('click', () => {
     ui().pendingThumb = '';
     updateThumbPreview();
@@ -1134,6 +1282,13 @@ function bindEvents() {
   $('#import-close').addEventListener('click', closeModal);
   $('#import-cancel').addEventListener('click', closeModal);
   $('#import-fetch').addEventListener('click', fetchImport);
+  $('#import-search').addEventListener('click', fetchSteamSearch);
+  // Delegation: tombol hasil cari dirender ulang tiap pencarian, jadi listener
+  // dipasang di wadahnya, bukan per baris.
+  $('#import-results').addEventListener('click', (e) => {
+    const row = e.target.closest('.import-result');
+    if (row && row.dataset.appid) importByAppID(row.dataset.appid);
+  });
   $('#import-url').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') fetchImport();
   });

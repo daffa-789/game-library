@@ -23,6 +23,10 @@ export function SaveLibrary(arg1:Array<main.Game>):Promise<void>;
 
 export function SaveSoftware(arg1:Array<main.Software>):Promise<void>;
 
+export function SaveThumbnail(arg1:string,arg2:string):Promise<string>;
+
 export function SteamImport(arg1:string):Promise<main.SteamImportResult>;
+
+export function SteamSearch(arg1:string):Promise<Array<main.SteamSearchResult>>;
 
 export function ThumbnailHandler():Promise<http.Handler>;

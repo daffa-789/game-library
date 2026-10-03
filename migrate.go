@@ -40,11 +40,13 @@ func legacyDataDirs(configDir string) []string {
 }
 
 // bootstrapLibrary membangun isi library.json pertama kali: hasil gabungan
-// katalog lama, atau data contoh bila tidak ada yang bisa dimigrasi.
+// katalog lama, atau 60 game bawaan (bila seedBuiltin aktif), atau data
+// contoh bila tidak ada apa pun untuk dimigrasi.
 func (a *App) bootstrapLibrary() *LibraryData {
 	data := &LibraryData{Games: []Game{}, Software: []Software{}}
 	seenGames := map[string]bool{}
 	seenSoftware := map[string]bool{}
+	seenAppID := map[string]bool{}
 	migrated := false
 
 	for _, dir := range a.legacyDirs {
@@ -56,7 +58,13 @@ func (a *App) bootstrapLibrary() *LibraryData {
 			if g.Title == "" || seenGames[g.ID] {
 				continue
 			}
+			if g.SteamAppID != "" && seenAppID[g.SteamAppID] {
+				continue
+			}
 			seenGames[g.ID] = true
+			if g.SteamAppID != "" {
+				seenAppID[g.SteamAppID] = true
+			}
 			data.Games = append(data.Games, g)
 		}
 		for _, s := range legacy.Software {
@@ -73,7 +81,20 @@ func (a *App) bootstrapLibrary() *LibraryData {
 	}
 
 	if !migrated {
-		return a.createSampleData()
+		if a.seedBuiltin {
+			for _, g := range a.builtinGames() {
+				if seenGames[g.ID] {
+					continue
+				}
+				seenGames[g.ID] = true
+				if g.SteamAppID != "" {
+					seenAppID[g.SteamAppID] = true
+				}
+				data.Games = append(data.Games, g)
+			}
+		} else {
+			return a.createSampleData()
+		}
 	}
 
 	if len(data.Games) > maxGames {

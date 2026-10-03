@@ -331,41 +331,41 @@ type thumbDest struct {
 	url  string
 }
 
-// downloadThumb menyimpan gambar dari halaman resmi ke folder thumbnails.
-// Mengembalikan "" bila gambar tidak bisa diambil — impor tetap boleh lanjut
-// tanpa thumbnail.
-func (a *App) downloadThumb(imgURL string) string {
+// saveThumbFromURL menyimpan gambar dari URL ke folder thumbnails dan
+// melaporkan kegagalan apa adanya. Jalur impor memakai downloadThumb di
+// bawahnya yang membuang error tersebut.
+func (a *App) saveThumbFromURL(imgURL string) (string, error) {
 	dest, ext, ok := a.thumbTarget(imgURL)
 	if !ok {
-		return ""
+		return "", fmt.Errorf("URL gambar tidak valid atau bukan alamat web yang bisa dibuka")
 	}
 
 	req, cancel, err := a.newRequest(http.MethodGet, dest.url, imageTimeout)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("URL gambar tidak valid")
 	}
 	defer cancel()
 
 	res, err := a.client.Do(req)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("Gambar tidak bisa diunduh — periksa koneksi atau URL-nya")
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return ""
+		return "", fmt.Errorf("Gambar tidak ditemukan di URL itu (HTTP %d)", res.StatusCode)
 	}
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(res.Header.Get("Content-Type"), ";")[0]))
-	if ext == "" {
-		ext = contentExtThumb[contentType]
+	// Nama file tidak boleh berbohong soal isinya: ekstensi dari Content-Type
+	// yang dikenal selalu menang atas tebakan dari URL.
+	if known := contentExtThumb[contentType]; known != "" {
+		ext = known
 	}
-	// Ekstensi ditentukan dari Content-Type bila URL tidak jelas: nama file di
-	// disk tidak boleh berbohong soal isinya.
 	if ext == "" || !strings.HasPrefix(contentType, "image/") {
-		return ""
+		return "", fmt.Errorf("URL itu bukan file gambar")
 	}
 	if res.ContentLength > maxThumbnailBytes {
-		return ""
+		return "", fmt.Errorf("Ukuran gambar terlalu besar (maks %d MB)", maxThumbnailBytes>>20)
 	}
 
 	// Ekstensi hasil negosiasi mungkin berbeda dari tebakan URL → ganti nama.
@@ -375,16 +375,37 @@ func (a *App) downloadThumb(imgURL string) string {
 
 	out, err := os.Create(dest.path)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("Gagal menyimpan gambar thumbnail")
 	}
-	defer out.Close()
 
-	written, err := io.Copy(out, io.LimitReader(res.Body, maxThumbnailBytes+1))
-	if err != nil || written == 0 || written > maxThumbnailBytes {
+	written, copyErr := io.Copy(out, io.LimitReader(res.Body, maxThumbnailBytes+1))
+	// Handle harus ditutup sebelum Remove: Windows menolak menghapus file yang
+	// masih terbuka, dan sisa unduhan gagal akan tertinggal selamanya.
+	closeErr := out.Close()
+	if copyErr != nil || closeErr != nil || written == 0 || written > maxThumbnailBytes {
 		_ = os.Remove(dest.path)
+		switch {
+		case copyErr != nil:
+			return "", fmt.Errorf("Unduhan gambar terputus")
+		case written == 0:
+			return "", fmt.Errorf("File gambar kosong atau tidak bisa dibaca")
+		case written > maxThumbnailBytes:
+			return "", fmt.Errorf("Ukuran gambar terlalu besar (maks %d MB)", maxThumbnailBytes>>20)
+		default:
+			return "", fmt.Errorf("Gagal menyimpan gambar thumbnail")
+		}
+	}
+	return thumbURLPrefix + filepath.Base(dest.path), nil
+}
+
+// downloadThumb dipakai jalur impor Steam/situs: kegagalan mengambil gambar
+// tidak boleh menggagalkan impor, jadi error dilah di sini.
+func (a *App) downloadThumb(imgURL string) string {
+	ref, err := a.saveThumbFromURL(imgURL)
+	if err != nil {
 		return ""
 	}
-	return thumbURLPrefix + filepath.Base(dest.path)
+	return ref
 }
 
 // thumbTarget memvalidasi URL gambar (skema, host, ekstensi) lalu menentukan

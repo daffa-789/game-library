@@ -1,7 +1,7 @@
 {
   "name": "softgame-library",
   "productName": "SoftGame Library",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Katalog digital dalam dua tab: game (dengan spesifikasi & impor Steam) dan software (tanpa spesifikasi)",
   "license": "MIT",
   "author": "Daffa",

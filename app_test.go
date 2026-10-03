@@ -311,3 +311,27 @@ func TestSteamImport_InvalidURL(t *testing.T) {
 		t.Errorf("expected error for non-steam URL")
 	}
 }
+
+func TestBuiltinGames_SeedingAndMerging(t *testing.T) {
+	app, tempDir := setupTestApp(t)
+	app.seedBuiltin = true
+
+	games, err := app.LoadLibrary()
+	if err != nil {
+		t.Fatalf("LoadLibrary failed: %v", err)
+	}
+
+	if len(games) != 60 {
+		t.Fatalf("expected 60 builtin games when seedBuiltin=true, got %d", len(games))
+	}
+
+	// Verify seed covers were materialized
+	for _, g := range games[:3] {
+		thumbFile := strings.TrimPrefix(g.Thumbnail, thumbURLPrefix)
+		path := filepath.Join(tempDir, "thumbnails", thumbFile)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("expected cover file %s to exist: %v", path, err)
+		}
+	}
+}
+

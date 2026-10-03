@@ -15,6 +15,9 @@
     loadLibrary: () => call('LoadLibrary'),
     saveLibrary: (games) => call('SaveLibrary', games),
     steamImport: (url) => call('SteamImport', url),
+    // Cari game di Steam Store supaya judul baru yang belum diketahui appid-nya
+    // tetap bisa diimpor.
+    steamSearch: (term) => call('SteamSearch', term),
 
     // Katalog software (tab "Software") — tanpa spesifikasi.
     loadSoftware: () => call('LoadSoftware'),
@@ -23,6 +26,7 @@
 
     // Dipakai kedua katalog.
     pickThumbnail: () => call('PickThumbnail'),
+    saveThumbnail: (ref, title) => call('SaveThumbnail', ref, title),
     deleteThumbnail: (ref) => call('DeleteThumbnail', ref),
     openExternal: (url) => call('OpenExternal', url),
     copyText: (text) => call('CopyText', text),

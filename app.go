@@ -42,6 +42,12 @@ const (
 	steamAPITimeout   = 15 * time.Second
 	steamImageTimeout = 45 * time.Second
 
+	// steamStoreRegion region (country code) untuk permintaan harga ke Steam
+	// Store. "id" dipilih karena pemilik toko berada di Indonesia, jadi harga
+	// yang tampil default sudah dalam Rupiah. Kalau region ini tidak punya
+	// price_overview untuk suatu judul, impor tetap jalan tanpa harga.
+	steamStoreRegion = "id"
+
 	apiTimeout      = 15 * time.Second
 	imageTimeout    = 45 * time.Second
 	importUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) SoftGameLibrary/1.0"
@@ -180,6 +186,11 @@ type App struct {
 	libraryCached bool
 
 	client *http.Client
+
+	// seedBuiltin mengaktifkan penambahan 60 game bawaan (seed) saat aplikasi
+	// pertama kali dijalankan oleh pengguna (NewApp). Dinonaktifkan pada
+	// newAppWithDataDir agar unit test tetap deterministik dan bersih.
+	seedBuiltin bool
 }
 
 func NewApp() *App {
@@ -192,6 +203,7 @@ func NewApp() *App {
 	}
 	a := newAppWithDataDir(filepath.Join(configDir, appDataDirName))
 	a.legacyDirs = legacyDataDirs(configDir)
+	a.seedBuiltin = true
 	return a
 }
 

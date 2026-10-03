@@ -63,10 +63,15 @@ func (a *App) SaveLibrary(games []Game) error {
 	}
 	normalizeGameThumbs(sanitized)
 
-	data, err := a.loadLocked()
+	prev, err := a.loadLocked()
 	if err != nil {
 		return err
 	}
+	// Entri bawaan yang tidak ikut tersimpan berarti sengaja dihapus
+	// pengguna; catat supaya tidak ditambahkan ulang saat aplikasi dibuka.
+	a.recordHiddenBuiltin(prev.Games, sanitized)
+
+	data := prev
 	data.Games = sanitized
 	return a.writeLibraryLocked(data)
 }
@@ -98,8 +103,10 @@ func (a *App) SaveSoftware(items []Software) error {
 }
 
 // loadLocked membaca katalog dari disk (lewat cache bila masih valid). File
-// yang belum ada dibangun dari hasil migrasi aplikasi lama, atau dari data
-// contoh bila tidak ada apa pun untuk dimigrasi. Panggil dengan a.mu dipegang.
+// yang belum ada dibangun dari katalog bawaan + hasil migrasi aplikasi lama.
+// Katalog bawaan digabung juga ke library yang sudah ada, jadi pembaruan
+// aplikasi tetap menambah judul baru tanpa menyentuh entri buatan pengguna.
+// Panggil dengan a.mu dipegang.
 func (a *App) loadLocked() (*LibraryData, error) {
 	fi, err := os.Stat(a.dataFile)
 	if err != nil {
@@ -148,6 +155,12 @@ func (a *App) loadLocked() (*LibraryData, error) {
 	a.libraryCache = data
 	a.libraryFinger = finger
 	a.libraryCached = true
+
+	if a.mergeBuiltinGames(data) {
+		// Gagal menulis tidak boleh menggagalkan load: katalog bawaan tetap
+		// tampil di sesi ini dan digabung ulang pada pembukaan berikutnya.
+		_ = a.writeLibraryLocked(data)
+	}
 
 	return data, nil
 }
@@ -379,3 +392,4 @@ func (a *App) createSampleData() *LibraryData {
 		},
 	}
 }
+

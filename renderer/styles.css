@@ -95,6 +95,72 @@ input, select { font-family: inherit; }
 
 .error-text { color: #e57373; font-size: 13px; margin: 10px 0 0; }
 
+/* Impor: petunjuk + daftar hasil pencarian Steam */
+.import-hint {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 10px 0 0;
+}
+.import-hint strong { color: var(--text); font-weight: 600; }
+
+.import-results {
+  margin-top: 12px;
+  max-height: 264px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-hover);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.import-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+.import-result:last-child { border-bottom: 0; }
+.import-result:hover, .import-result:focus-visible {
+  background: var(--panel-hover);
+  outline: none;
+}
+.import-result img {
+  width: 62px;
+  height: 23px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  background: #16202d;
+}
+.import-result .ir-body { flex: 1 1 auto; min-width: 0; }
+.import-result .ir-title {
+  display: block;
+  font-size: 13px;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.import-result .ir-meta {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.import-result .ir-price {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: #a4d007;
+  white-space: nowrap;
+}
+
 .btn.big { padding: 12px 22px; font-size: 14px; }
 
 .btn.small { padding: 6px 10px; font-size: 12px; }
@@ -659,6 +725,7 @@ input, select { font-family: inherit; }
   flex-shrink: 0;
 }
 .thumb-actions { flex: 1; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.thumb-mini { display: flex; gap: 8px; }
 .or-line {
   display: flex;
   align-items: center;

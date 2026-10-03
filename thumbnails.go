@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -182,13 +183,15 @@ func (a *App) PickThumbnail() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("gagal menyimpan gambar thumbnail: %w", err)
 	}
-	defer dst.Close()
 
-	written, err := io.Copy(dst, io.LimitReader(src, maxThumbnailBytes+1))
-	if err != nil || written > maxThumbnailBytes {
+	written, copyErr := io.Copy(dst, io.LimitReader(src, maxThumbnailBytes+1))
+	// Handle harus ditutup sebelum Remove: Windows menolak menghapus file yang
+	// masih terbuka, dan hasil salinan gagal akan tertinggal selamanya.
+	closeErr := dst.Close()
+	if copyErr != nil || closeErr != nil || written > maxThumbnailBytes {
 		_ = os.Remove(destPath)
-		if err != nil {
-			return "", fmt.Errorf("gagal menyalin file thumbnail: %w", err)
+		if copyErr != nil {
+			return "", fmt.Errorf("gagal menyalin file thumbnail: %w", copyErr)
 		}
 		return "", fmt.Errorf("Ukuran gambar terlalu besar (maks %d MB)", maxThumbnailBytes>>20)
 	}
@@ -228,4 +231,90 @@ func (a *App) newThumbName(ext string) (string, error) {
 		name = hex.EncodeToString(buf) + ext
 	}
 	return name, nil
+}
+
+// ---------------------------------------------------------------------------
+// Ekspor: menyimpan gambar entri ke lokasi pilihan user
+// ---------------------------------------------------------------------------
+
+const (
+	// maxFileNameLen batas panjang nama file (tanpa ekstensi) yang diturunkan
+	// dari judul entri.
+	maxFileNameLen = 80
+
+	// forbiddenFileNameChars karakter yang tidak boleh ada di nama file Windows.
+	forbiddenFileNameChars = `<>:"/\|?*`
+)
+
+// safeFileName menurunkan nama file yang aman dari judul entri: karakter
+// terlarang diganti tanda hubung supaya masih mirip judul aslinya, whitespace
+// dirapikan jadi satu spasi, dan panjang dipotong dengan truncateUTF8 agar
+// tidak memecah rune di tengah.
+func safeFileName(title, ext string) string {
+	var b strings.Builder
+	for _, r := range title {
+		switch {
+		case r < 0x20 || r == 0x7f:
+			// Control character dibuang, bukan diganti: diganti spasi pun
+			// namanya jadi aneh di Explorer.
+		case strings.ContainsRune(forbiddenFileNameChars, r):
+			b.WriteRune('-')
+		case unicode.IsSpace(r):
+			b.WriteRune(' ')
+		default:
+			b.WriteRune(r)
+		}
+	}
+
+	name := strings.Trim(strings.TrimSpace(b.String()), ". ")
+	if name == "" {
+		name = "thumbnail"
+	}
+	return truncateUTF8(name, maxFileNameLen) + ext
+}
+
+// exportThumbBytes membaca gambar yang ditunjuk sebuah referensi thumbnail.
+// Ini satu-satunya jalan keluar data gambar dari folder aplikasi: ref diikat
+// gerbang safeThumbPath yang sama dengan yang dipakai handler dan penghapusan,
+// jadi tidak bisa menunjuk ke luar folder thumbnails.
+func (a *App) exportThumbBytes(ref string) ([]byte, string, error) {
+	target, ok := a.safeThumbPath(ref)
+	if !ok {
+		return nil, "", fmt.Errorf("Entri ini tidak punya gambar tersimpan")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return nil, "", fmt.Errorf("File gambar tidak ditemukan di folder data")
+	}
+	if len(data) == 0 {
+		return nil, "", fmt.Errorf("File gambar kosong")
+	}
+	return data, strings.ToLower(filepath.Ext(target)), nil
+}
+
+// SaveThumbnail membuka dialog Simpan Sebagai lalu menyalin gambar entri ke
+// lokasi pilihan user. Dialog dibatalkan = "" tanpa error.
+func (a *App) SaveThumbnail(ref, title string) (string, error) {
+	if a.ctx == nil {
+		return "", nil
+	}
+	data, ext, err := a.exportThumbBytes(ref)
+	if err != nil {
+		return "", err
+	}
+
+	dest, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Simpan Gambar Thumbnail",
+		DefaultFilename: safeFileName(title, ext),
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Gambar (" + ext + ")", Pattern: "*" + ext},
+		},
+	})
+	if err != nil || dest == "" {
+		return "", nil
+	}
+	if err := os.WriteFile(dest, data, 0o644); err != nil {
+		return "", fmt.Errorf("Gagal menyimpan gambar di lokasi itu")
+	}
+	return dest, nil
 }

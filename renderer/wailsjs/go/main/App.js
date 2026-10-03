@@ -42,8 +42,16 @@ export function SaveSoftware(arg1) {
   return window['go']['main']['App']['SaveSoftware'](arg1);
 }
 
+export function SaveThumbnail(arg1, arg2) {
+  return window['go']['main']['App']['SaveThumbnail'](arg1, arg2);
+}
+
 export function SteamImport(arg1) {
   return window['go']['main']['App']['SteamImport'](arg1);
+}
+
+export function SteamSearch(arg1) {
+  return window['go']['main']['App']['SteamSearch'](arg1);
 }
 
 export function ThumbnailHandler() {
