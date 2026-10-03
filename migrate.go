@@ -92,6 +92,8 @@ func (a *App) bootstrapLibrary() *LibraryData {
 				}
 				data.Games = append(data.Games, g)
 			}
+			samples := a.createSampleData()
+			data.Software = append(data.Software, samples.Software...)
 		} else {
 			return a.createSampleData()
 		}

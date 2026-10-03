@@ -333,5 +333,13 @@ func TestBuiltinGames_SeedingAndMerging(t *testing.T) {
 			t.Errorf("expected cover file %s to exist: %v", path, err)
 		}
 	}
+
+	sw, err := app.LoadSoftware()
+	if err != nil {
+		t.Fatalf("LoadSoftware failed: %v", err)
+	}
+	if len(sw) != 3 {
+		t.Fatalf("expected 3 sample software when seedBuiltin=true, got %d", len(sw))
+	}
 }
 
