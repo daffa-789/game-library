@@ -19,9 +19,21 @@ if (!url) {
 
 console.log(`\n  SoftGame Library (dev) -> ${url}\n`)
 
-const child = spawn(electronPath, ['.'], {
+// ELECTRON_RUN_AS_NODE membuat Electron berjalan sebagai Node biasa, sehingga
+// require('electron') mengembalikan undefined dan jendela tidak pernah muncul.
+// Variabel ini kadang disetel oleh shell/IDE; buang dari lingkungan anak.
+const childEnv = { ...process.env, VITE_DEV_SERVER_URL: url }
+delete childEnv.ELECTRON_RUN_AS_NODE
+
+// Argumen tambahan diteruskan apa adanya ke Electron, mis.
+//   bun run dev -- --no-sandbox --in-process-gpu
+// Berguna di lingkungan terbatas (VM/remote desktop) yang tidak bisa
+// menjalankan proses GPU/sandbox Chromium.
+const extraArgs = process.argv.slice(2)
+
+const child = spawn(electronPath, ['.', ...extraArgs], {
   stdio: 'inherit',
-  env: { ...process.env, VITE_DEV_SERVER_URL: url },
+  env: childEnv,
 })
 
 child.on('close', async (code) => {

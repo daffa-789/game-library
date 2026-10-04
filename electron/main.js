@@ -21,6 +21,25 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Lingkungan tanpa akses GPU (mesin virtual, remote desktop, atau driver yang
+// rusak) membuat proses GPU Chromium mati dan Electron berhenti dengan pesan
+// "GPU process isn't usable. Goodbye." sebelum jendela sempat tampil.
+// Setel SOFTGAME_SOFTWARE_RENDER=1 untuk memaksa rendering perangkat lunak.
+// Harus dipanggil sebelum app siap.
+if (process.env.SOFTGAME_SOFTWARE_RENDER === '1') {
+  app.disableHardwareAcceleration()
+  for (const flag of [
+    'disable-gpu',
+    'disable-gpu-compositing',
+    'disable-gpu-sandbox',
+    'disable-software-rasterizer',
+    'in-process-gpu',
+    'disable-dev-shm-usage',
+  ]) {
+    app.commandLine.appendSwitch(flag)
+  }
+}
+
 // Protokol thumb:// menyajikan gambar dari folder thumbnails. Skema harus
 // didaftarkan sebagai privileged sebelum app siap, kalau tidak
 // <img src="thumb://..."> akan diblokir sebagai skema asing.

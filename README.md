@@ -113,6 +113,23 @@ berperilaku sebagai Node biasa dan gagal memuat `app`. Jalankan dengan variabel 
 env -u ELECTRON_RUN_AS_NODE bun run start
 ```
 
+`bun run dev` sudah membuang variabel itu dari proses anak, jadi tidak perlu diurus manual.
+
+**Mesin tanpa akses GPU** (mesin virtual, remote desktop, driver rusak) membuat proses GPU
+Chromium mati dan Electron berhenti dengan `GPU process isn't usable. Goodbye.` sebelum jendela
+tampil. Setel `SOFTGAME_SOFTWARE_RENDER=1` untuk memaksa rendering perangkat lunak:
+
+```bash
+SOFTGAME_SOFTWARE_RENDER=1 bun run dev
+```
+
+`bun run dev` juga meneruskan argumen tambahan apa adanya ke Electron, berguna untuk lingkungan
+yang membatasi sandbox Chromium:
+
+```bash
+bun run dev -- --no-sandbox --in-process-gpu
+```
+
 ---
 
 ## Struktur Proyek

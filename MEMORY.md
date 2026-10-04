@@ -41,7 +41,13 @@ bun run dist     # bundel + installer NSIS ke build/bin/
 ```
 
 **Penting:** di lingkungan ini `ELECTRON_RUN_AS_NODE=1` disetel, sehingga Electron berperilaku
-sebagai Node biasa. Selalu jalankan dengan `env -u ELECTRON_RUN_AS_NODE ...`.
+sebagai Node biasa. Selalu jalankan dengan `env -u ELECTRON_RUN_AS_NODE ...`
+(`bun run dev` sudah membuang variabel itu sendiri).
+
+Kalau proses GPU Chromium tidak bisa jalan (VM / remote desktop / driver rusak), aplikasi
+berhenti dengan `GPU process isn't usable. Goodbye.` sebelum jendela tampil. Setel
+`SOFTGAME_SOFTWARE_RENDER=1` untuk memaksa rendering perangkat lunak. `bun run dev` juga
+meneruskan argumen tambahan ke Electron: `bun run dev -- --no-sandbox`.
 
 ## 3. Struktur Proyek
 
