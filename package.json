@@ -1,15 +1,26 @@
 {
   "name": "softgame-library",
-  "productName": "SoftGame Library",
-  "version": "1.0.2",
-  "description": "Katalog digital dalam dua tab: game (dengan spesifikasi & impor Steam) dan software (tanpa spesifikasi)",
+  "version": "2.0.0",
+  "description": "Katalog digital dua tab: game (dengan spesifikasi & impor Steam) dan software (tanpa spesifikasi). Dibangun dengan Bun + Electron + React.",
   "license": "MIT",
   "author": "Daffa",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.js",
   "scripts": {
-    "dev": "wails dev",
-    "test": "go test ./...",
-    "assets:installer": "go run ./tools/gen-installer-images",
-    "build": "wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o SoftGameLibrary.exe",
-    "installer": "go run ./tools/gen-installer-images && wails build -clean -platform windows/amd64 -trimpath -ldflags \"-s -w\" -o SoftGameLibrary.exe -nsis -installscope user"
+    "dev": "bun scripts/dev.mjs",
+    "build": "vite build",
+    "start": "electron .",
+    "dist": "vite build && electron-builder --win nsis --config electron-builder.yml"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.7"
   }
 }

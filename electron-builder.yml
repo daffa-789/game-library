@@ -1,0 +1,34 @@
+# Konfigurasi paket Windows (installer NSIS) untuk SoftGame Library.
+#
+# files sengaja dibatasi: hanya proses utama Electron, hasil build renderer,
+# cover bawaan, dan package.json. Sumber Go/Wails lama tidak ikut dibundel.
+appId: com.daffa.softgamelibrary
+productName: SoftGame Library
+copyright: Copyright © 2026 Daffa
+
+directories:
+  output: build/bin
+  buildResources: build
+
+files:
+  - electron/**/*
+  - dist/**/*
+  - seedcovers/**/*
+  - package.json
+  - '!**/*.map'
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/windows/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: SoftGame Library
+  artifactName: SoftGameLibrary-Setup-${version}-amd64.${ext}
