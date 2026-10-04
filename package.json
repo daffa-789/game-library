@@ -1,16 +1,21 @@
 {
   "name": "softgame-library",
   "version": "2.0.0",
-  "description": "Katalog digital dua tab: game (dengan spesifikasi & impor Steam) dan software (tanpa spesifikasi). Dibangun dengan Bun + Electron + React.",
+  "description": "Katalog digital dua tab: game (dengan spesifikasi & impor Steam) dan software (tanpa spesifikasi). Dibangun dengan Electron + React (Vite).",
   "license": "MIT",
   "author": "Daffa",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "dev": "bun scripts/dev.mjs",
+    "dev": "node scripts/dev.mjs",
     "build": "vite build",
     "start": "electron .",
+    "verify": "electron scripts/verify.mjs",
+    "smoke": "vite build && electron scripts/smoke.mjs",
     "dist": "vite build && electron-builder --win nsis --config electron-builder.yml"
   },
   "dependencies": {

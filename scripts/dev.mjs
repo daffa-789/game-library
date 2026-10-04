@@ -26,7 +26,7 @@ const childEnv = { ...process.env, VITE_DEV_SERVER_URL: url }
 delete childEnv.ELECTRON_RUN_AS_NODE
 
 // Argumen tambahan diteruskan apa adanya ke Electron, mis.
-//   bun run dev -- --no-sandbox --in-process-gpu
+//   npm run dev -- --no-sandbox --in-process-gpu
 // Berguna di lingkungan terbatas (VM/remote desktop) yang tidak bisa
 // menjalankan proses GPU/sandbox Chromium.
 const extraArgs = process.argv.slice(2)

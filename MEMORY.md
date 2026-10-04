@@ -19,7 +19,7 @@ spesifikasi pelanggan → **Copy Link** Google Drive → kirim ke pelanggan.
 
 | Komponen | Teknologi |
 |---|---|
-| Package manager + runtime | **Bun 1.4.2** |
+| Runtime + package manager | **Node.js 18+** dengan **npm** |
 | Shell desktop | **Electron 33** (Chromium + Node bawaan) |
 | Backend | JavaScript ESM di `electron/` (`main.js`, `preload.cjs`, `lib/*.js`) |
 | Renderer | **React 18 (JSX)** di `src/`, dibundel **Vite 6** |
@@ -27,27 +27,32 @@ spesifikasi pelanggan → **Copy Link** Google Drive → kirim ke pelanggan.
 | Installer | `electron-builder` → NSIS per-user di `build/bin/` |
 
 > **Riwayat:** proyek ini pernah memakai Electron vanilla, lalu dimigrasi ke **Wails v2 (Go +
-> WebView2)**, dan pada 4 Okt 2026 dimigrasi penuh ke **Bun + Electron + React**. Seluruh kode Go
+> WebView2)**, dan pada 4 Okt 2026 dimigrasi penuh ke **Electron + React**. Seluruh kode Go
 > sudah dihapus dari repo **dan** dari sistem. Versi Go terakhir tersimpan di tag Git
 > **`wails-go-final`** — jangan sarankan kembali ke Go/Wails tanpa diminta.
+>
+> Proyek sempat memakai Bun sebagai package manager, lalu dikembalikan ke **npm** atas
+> permintaan user (4 Okt 2026). Jangan memakai atau menyarankan Bun lagi di proyek ini.
 
 Perintah:
 ```bash
-bun install
-bun run dev      # Vite + Electron (hot reload)
-bun run build    # bundel renderer ke dist/
-bun run start    # jalankan Electron dari hasil build
-bun run dist     # bundel + installer NSIS ke build/bin/
+npm install
+npm run dev      # Vite + Electron (hot reload)
+npm run build    # bundel renderer ke dist/
+npm run start    # jalankan Electron dari hasil build
+npm run verify   # 17 pemeriksaan backend
+npm run smoke    # build + uji render React dan pemuatan cover
+npm run dist     # bundel + installer NSIS ke build/bin/
 ```
 
 **Penting:** di lingkungan ini `ELECTRON_RUN_AS_NODE=1` disetel, sehingga Electron berperilaku
 sebagai Node biasa. Selalu jalankan dengan `env -u ELECTRON_RUN_AS_NODE ...`
-(`bun run dev` sudah membuang variabel itu sendiri).
+(`npm run dev` sudah membuang variabel itu sendiri).
 
 Kalau proses GPU Chromium tidak bisa jalan (VM / remote desktop / driver rusak), aplikasi
 berhenti dengan `GPU process isn't usable. Goodbye.` sebelum jendela tampil. Setel
-`SOFTGAME_SOFTWARE_RENDER=1` untuk memaksa rendering perangkat lunak. `bun run dev` juga
-meneruskan argumen tambahan ke Electron: `bun run dev -- --no-sandbox`.
+`SOFTGAME_SOFTWARE_RENDER=1` untuk memaksa rendering perangkat lunak. `npm run dev` juga
+meneruskan argumen tambahan ke Electron: `npm run dev -- --no-sandbox`.
 
 ## 3. Struktur Proyek
 
@@ -56,7 +61,7 @@ SoftGame/
 ├── index.html                 # Entri Vite (shell minimal, <div id="root">)
 ├── vite.config.js             # Vite + penyuntik CSP saat build + pembuang crossorigin
 ├── electron-builder.yml       # Konfigurasi installer Windows (NSIS, per-user)
-├── package.json               # Metadata + skrip (Bun)
+├── package.json               # Metadata + skrip (npm)
 ├── electron/
 │   ├── main.js                # Jendela, single instance, protokol thumb://, pemuatan dev/prod
 │   ├── preload.cjs            # contextBridge → window.softgame (satu-satunya jembatan)
@@ -162,15 +167,16 @@ Definisi field form ada di `src/constants.js` — **sinkronkan** bila menambah f
 8. **Impor software** dari situs resmi vendor (OpenGraph)
 9. Keyboard: `Ctrl/Cmd+F` fokus cari, `Esc` tutup modal/detail, `Enter` simpan
 10. Placeholder otomatis untuk gambar yang gagal dimuat
-11. Installer NSIS per-user (tanpa UAC) lewat `bun run dist`
+11. Installer NSIS per-user (tanpa UAC) lewat `npm run dist`
 
 ## 8. Verifikasi (wajib setelah mengubah backend/renderer)
 
 ```bash
-bun run build
-env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron scripts/verify.mjs   # 17 pemeriksaan backend
-env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron scripts/smoke.mjs    # render + cover
+npm run verify   # 17 pemeriksaan backend
+npm run smoke    # build + render React dan pemuatan cover
 ```
+
+Di lingkungan ini jalankan dengan `env -u ELECTRON_RUN_AS_NODE npm run verify` (lihat §12).
 
 `verify.mjs` menguji: 60 game bawaan, distribusi 20/20/20, link & referensi thumbnail, cover
 tersalin, 3 software contoh, muat ulang tidak menggandakan, `hidden-builtin.json`, gerbang
@@ -185,7 +191,7 @@ pengguna tidak pernah tersentuh.
 - Repo: **https://github.com/daffa-789/game-library** (public, akun `daffa-789`)
 - Branch utama: `main`. Remote `origin` sudah terpasang; kredensial tersimpan di Windows
   Credential Manager sehingga push langsung jalan. Tidak ada `gh` CLI.
-- Tag penting: **`wails-go-final`** = versi terakhir sebelum migrasi ke Bun/Electron.
+- Tag penting: **`wails-go-final`** = versi terakhir sebelum migrasi ke Electron.
 - `.gitignore`: `node_modules/`, `dist/`, `build/bin/`, `*.exe`, `*.log`, `.workbuddy-ai/`
 
 ## 10. Konvensi & Selera User (penting!)
@@ -220,4 +226,4 @@ pengguna tidak pernah tersentuh.
 5. **`rm -rf <dir>` sering dimatikan `SIGTERM`** oleh sandbox; pakai `rm -f <daftar file>` lalu `rmdir`.
 6. `reg.exe`, `wmic.exe`, `schtasks.exe` diblokir; membuka `cmd.exe` dari PowerShell diblokir.
    Operasi yang butuh admin bisa lewat `Start-Process -Verb RunAs -Wait`.
-7. Playbook lengkap: skill **`electron-bun-app-windows`**.
+7. Playbook lengkap: skill **`electron-app-windows`**.

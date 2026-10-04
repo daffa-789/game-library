@@ -1,6 +1,6 @@
 # SoftGame Library
 
-Aplikasi katalog digital portabel untuk game dan software, dibangun dengan **Bun + Electron + React (JSX)**.
+Aplikasi katalog digital portabel untuk game dan software, dibangun dengan **Electron + React (JSX)**.
 
 SoftGame Library memungkinkan pengelolaan katalog game dan software, melihat spesifikasi sistem,
 mengimpor metadata langsung dari Steam Store API, mengelola thumbnail secara lokal, dan membagikan
@@ -14,7 +14,7 @@ link unduhan (Google Drive) dengan cepat.
 
 ## Arsitektur & Teknologi
 
-- **Runtime & package manager**: **Bun 1.4+**
+- **Runtime & package manager**: **Node.js 18+** dengan **npm** (proses utama berjalan di Node bawaan Electron)
 - **Shell desktop**: **Electron 33**
   - Satu instance saja (`requestSingleInstanceLock`); instance kedua memunculkan jendela yang sudah ada.
   - Jendela disesuaikan dengan work area layar supaya title bar tidak pernah keluar layar.
@@ -76,7 +76,7 @@ link unduhan (Google Drive) dengan cepat.
 ## Kebutuhan Sistem
 
 - **OS**: Windows 10 / 11 (64-bit)
-- **Pengembangan**: Bun 1.4+ (Node.js tidak diperlukan untuk menjalankan proyek ini)
+- **Pengembangan**: Node.js 18+ dan npm
 - **Pemaketan installer**: `electron-builder` (sudah termasuk devDependency)
 
 ---
@@ -94,11 +94,13 @@ Path ini sengaja dipertahankan sama persis dengan versi Go, sehingga data lama l
 ## Perintah
 
 ```bash
-bun install        # pasang dependensi
-bun run dev        # mode pengembangan (Vite + Electron, hot reload)
-bun run build      # bundel renderer ke dist/
-bun run start      # jalankan Electron dari hasil build
-bun run dist       # bundel renderer + buat installer NSIS
+npm install        # pasang dependensi
+npm run dev        # mode pengembangan (Vite + Electron, hot reload)
+npm run build      # bundel renderer ke dist/
+npm run start      # jalankan Electron dari hasil build
+npm run verify     # 17 pemeriksaan backend
+npm run smoke      # build + uji render React dan pemuatan cover
+npm run dist       # bundel renderer + buat installer NSIS
 ```
 
 Installer dihasilkan di `build/bin/SoftGameLibrary-Setup-<versi>-amd64.exe`
@@ -110,24 +112,24 @@ Jika `electron` dijalankan dari shell yang menyetel `ELECTRON_RUN_AS_NODE=1`, El
 berperilaku sebagai Node biasa dan gagal memuat `app`. Jalankan dengan variabel itu dihapus:
 
 ```bash
-env -u ELECTRON_RUN_AS_NODE bun run start
+env -u ELECTRON_RUN_AS_NODE npm run start
 ```
 
-`bun run dev` sudah membuang variabel itu dari proses anak, jadi tidak perlu diurus manual.
+`npm run dev` sudah membuang variabel itu dari proses anak, jadi tidak perlu diurus manual.
 
 **Mesin tanpa akses GPU** (mesin virtual, remote desktop, driver rusak) membuat proses GPU
 Chromium mati dan Electron berhenti dengan `GPU process isn't usable. Goodbye.` sebelum jendela
 tampil. Setel `SOFTGAME_SOFTWARE_RENDER=1` untuk memaksa rendering perangkat lunak:
 
 ```bash
-SOFTGAME_SOFTWARE_RENDER=1 bun run dev
+SOFTGAME_SOFTWARE_RENDER=1 npm run dev
 ```
 
-`bun run dev` juga meneruskan argumen tambahan apa adanya ke Electron, berguna untuk lingkungan
+`npm run dev` juga meneruskan argumen tambahan apa adanya ke Electron, berguna untuk lingkungan
 yang membatasi sandbox Chromium:
 
 ```bash
-bun run dev -- --no-sandbox --in-process-gpu
+npm run dev -- --no-sandbox --in-process-gpu
 ```
 
 ---
@@ -139,7 +141,7 @@ SoftGame/
 ├── index.html                 # Entri Vite (shell minimal, <div id="root">)
 ├── vite.config.js             # Konfigurasi Vite + penyuntik CSP saat build
 ├── electron-builder.yml       # Konfigurasi installer Windows (NSIS)
-├── package.json               # Metadata + skrip (Bun)
+├── package.json               # Metadata + skrip (npm)
 ├── electron/
 │   ├── main.js                # Proses utama: jendela, single instance, protokol thumb://
 │   ├── preload.cjs            # contextBridge -> window.softgame
@@ -172,11 +174,17 @@ SoftGame/
 
 ```bash
 # Pemeriksaan backend (katalog bawaan, keamanan path, sanitasi, hidden-builtin)
-env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron scripts/verify.mjs
+npm run verify
 
 # Pemeriksaan renderer (React benar-benar ter-render + cover termuat lewat thumb://)
-bun run build
-env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron scripts/smoke.mjs
+npm run smoke
+```
+
+Di lingkungan yang menyetel `ELECTRON_RUN_AS_NODE=1`, jalankan dengan variabel itu dihapus:
+
+```bash
+env -u ELECTRON_RUN_AS_NODE npm run verify
+env -u ELECTRON_RUN_AS_NODE npm run smoke
 ```
 
 ---

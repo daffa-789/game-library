@@ -73,7 +73,7 @@ app.whenReady().then(async () => {
 
   const indexFile = path.join(root, 'dist', 'index.html')
   if (!fs.existsSync(indexFile)) {
-    console.log('GAGAL: dist/index.html belum ada — jalankan `bun run build` dulu.')
+    console.log('GAGAL: dist/index.html belum ada — jalankan `npm run build` dulu.')
     app.exit(1)
     return
   }
