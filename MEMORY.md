@@ -1,7 +1,7 @@
-# MEMORY.md — Game Library (Dokumentasi Handoff untuk AI)
+# MEMORY.md — SoftGame Library (Dokumentasi Handoff)
 
 > Dokumen ini dibuat agar AI/manusia lain bisa langsung melanjutkan pengerjaan proyek tanpa
-> membaca seluruh riwayat percakapan. Terakhir diupdate: 22 September 2026.
+> membaca seluruh riwayat percakapan. Terakhir diupdate: 4 Oktober 2026.
 
 ---
 
@@ -19,159 +19,199 @@ spesifikasi pelanggan → **Copy Link** Google Drive → kirim ke pelanggan.
 
 | Komponen | Teknologi |
 |---|---|
-| Framework desktop | **Wails v2 (v2.16.0)** (Go 1.27 + Microsoft WebView2 bawaan Windows) |
-| UI | Vanilla HTML/CSS/JS — **tanpa build step, tanpa framework**, tema Steam |
-| Penyimpanan | File JSON di AppData: `%APPDATA%\libray-game\library.json` |
-| Build executable | `wails build -clean -ldflags "-s -w" -trimpath` → single file `build/bin/GameLibrary.exe` (~11.4 MB) |
-| Go / Node di dev | Go 1.27.1 / Node v24.18.0 |
+| Package manager + runtime | **Bun 1.4.2** |
+| Shell desktop | **Electron 33** (Chromium + Node bawaan) |
+| Backend | JavaScript ESM di `electron/` (`main.js`, `preload.cjs`, `lib/*.js`) |
+| Renderer | **React 18 (JSX)** di `src/`, dibundel **Vite 6** |
+| Penyimpanan | JSON di AppData: `%APPDATA%\softgame-library\library.json` |
+| Installer | `electron-builder` → NSIS per-user di `build/bin/` |
+
+> **Riwayat:** proyek ini pernah memakai Electron vanilla, lalu dimigrasi ke **Wails v2 (Go +
+> WebView2)**, dan pada 4 Okt 2026 dimigrasi penuh ke **Bun + Electron + React**. Seluruh kode Go
+> sudah dihapus dari repo **dan** dari sistem. Versi Go terakhir tersimpan di tag Git
+> **`wails-go-final`** — jangan sarankan kembali ke Go/Wails tanpa diminta.
 
 Perintah:
 ```bash
-wails dev           # jalankan mode development
-wails build         # kompilasi binary mandiri ke build/bin/GameLibrary.exe
-go test -v ./...    # jalankan unit test Go backend
+bun install
+bun run dev      # Vite + Electron (hot reload)
+bun run build    # bundel renderer ke dist/
+bun run start    # jalankan Electron dari hasil build
+bun run dist     # bundel + installer NSIS ke build/bin/
 ```
+
+**Penting:** di lingkungan ini `ELECTRON_RUN_AS_NODE=1` disetel, sehingga Electron berperilaku
+sebagai Node biasa. Selalu jalankan dengan `env -u ELECTRON_RUN_AS_NODE ...`.
 
 ## 3. Struktur Proyek
 
 ```
-Libray Game/                      (folder = C:\Users\Daffa\Desktop\Libray Game)
-├── main.js                       # Electron main process: window, IPC, data, protokol glib://
-├── preload.js                    # contextBridge → window.api (loadLibrary, saveLibrary,
-│                                 #   pickThumbnail, deleteThumbnail, openExternal, copyText)
-├── renderer/
-│   ├── index.html                # Seluruh UI: topbar, view-library, view-detail, modals
-│   ├── styles.css                # Tema Steam (CSS variables di :root)
-│   └── app.js                    # Semua logika UI (state, renderGrid, renderDetail, form, dll)
-├── assets/                       # logo.svg, icon.ico (auto-generate), icon.html, icon-256.png
-├── dist/                         # hasil build (TIDAK di-git, file >100MB)
-├── logo-output/                  # contoh hasil skill logo (SVG+PNG+preview.html)
-└── package.json                  # scripts + konfigurasi electron-builder
+SoftGame/
+├── index.html                 # Entri Vite (shell minimal, <div id="root">)
+├── vite.config.js             # Vite + penyuntik CSP saat build + pembuang crossorigin
+├── electron-builder.yml       # Konfigurasi installer Windows (NSIS, per-user)
+├── package.json               # Metadata + skrip (Bun)
+├── electron/
+│   ├── main.js                # Jendela, single instance, protokol thumb://, pemuatan dev/prod
+│   ├── preload.cjs            # contextBridge → window.softgame (satu-satunya jembatan)
+│   └── lib/
+│       ├── paths.js           # Lokasi folder data + allow-list ekstensi thumbnail
+│       ├── store.js           # Load/save katalog, tulis atomik, cache, data contoh
+│       ├── migrate.js         # Penyerapan katalog aplikasi lama
+│       ├── seed.js            # Katalog bawaan 60 game + penggabungan + hidden-builtin
+│       ├── sanitize.js        # Pembersihan field, pemotongan aman-rune, UUID v4
+│       ├── steam.js           # Steam Store API + unduh gambar header
+│       ├── website.js         # Impor software dari situs vendor (OpenGraph)
+│       ├── thumbnails.js      # Gerbang keamanan path, dialog native, resolver thumb://
+│       ├── window.js          # Penyesuaian ukuran jendela terhadap work area
+│       ├── system.js          # OpenExternal & CopyText
+│       └── ipc.js             # Pendaftaran seluruh channel IPC
+├── src/                       # Renderer React (JSX)
+│   ├── main.jsx, App.jsx, api.js, constants.js, icons.jsx, styles.css, logo.svg
+│   └── components/            # Toolbar, LibraryBar, Grid, Card, EmptyState, DetailPanel,
+│                              #   EntryFormModal, ConfirmModal, ImportModal, Toast
+├── seedcovers/                # 60 cover bawaan (jpg)
+├── scripts/                   # dev.mjs, verify.mjs, smoke.mjs
+├── assets/                    # icon.svg/ico/png, logo.svg (aset sumber)
+├── build/                     # appicon.png + windows/icon.ico (dipakai electron-builder)
+└── logo-output/               # contoh hasil skill logo (tidak dipakai runtime)
 ```
 
 ## 4. Data & Penyimpanan
 
-- **File data**: `%APPDATA%\libray-game\library.json` → format `{ "games": [ ... ] }`
-- **Thumbnail lokal**: `%APPDATA%\libray-game\thumbnails\` — file gambar diakses renderer lewat
-  protokol kustom **`glib://thumb/<namafile>`** (didefinisikan di main.js, `registerThumbProtocol`).
-  Thumbnail berupa URL http(s) disimpan apa adanya.
-- Penyimpanan pakai atomic write (tulis `.tmp` lalu rename) + sanitasi field di `sanitizeGames`.
-- 2 game contoh dibuat otomatis saat pertama kali jalan (fungsi `createSampleData`), boleh dihapus user.
+- **File data**: `%APPDATA%\softgame-library\library.json` → `{ "games": [...], "software": [...] }`
+- **Thumbnail lokal**: `%APPDATA%\softgame-library\thumbnails\`
+- **Penanda entri bawaan yang dihapus**: `%APPDATA%\softgame-library\hidden-builtin.json`
+- **Karantina file rusak**: `library.json.rusak-<timestamp>`
+
+Path ini **sengaja identik dengan versi Go**, sehingga data lama langsung terbaca. Jangan diubah.
+
+Referensi thumbnail di data selalu berbentuk `/thumbnails/<file>`. Skema lama `glib://thumb/<file>`
+dan `slib://thumb/<file>` dinormalisasi otomatis saat load. Renderer mengubahnya menjadi
+`thumb://local/<file>` lewat `thumbSrc()` di `src/api.js`; protokol itu ditangani di `electron/main.js`
+dan **wajib lewat `safeThumbPath`**.
 
 ### Skema objek game
 ```jsonc
 {
-  "id": "uuid",
+  "id": "uuid | builtin-<appid>",
   "title": "string (wajib)",
-  "thumbnail": "glib://thumb/xxx.jpg | https://... | '' ",
-  "link": "string URL Google Drive (wajib)",
-  "genre": "string", "size": "mis. 90 GB", "price": "mis. Rp 25.000",
+  "thumbnail": "/thumbnails/xxx.jpg | https://... | ''",
+  "link": "URL Google Drive (atau URL Steam Store untuk entri bawaan)",
+  "genre": "string (entri bawaan: genre Steam + ' · <tahun>')",
+  "size": "mis. 90 GB", "price": "mis. Rp 25.000",
   "steamAppId": "string, hasil impor Steam (bisa '')",
   "specs": {
-    "min": { "os","cpu","ram","gpu","dx","net","storage","sound","notes" },  // semua string
+    "min": { "os","cpu","ram","gpu","dx","net","storage","sound","notes" },
     "rec": { ...sama... }
   },
   "createdAt": "ISO", "updatedAt": "ISO"
 }
 ```
-Kunci spek: `os` (OS), `cpu` (Processor), `ram` (Memory), `gpu` (Graphics), `dx` (DirectX),
-`net` (Network), `storage` (Storage), `sound` (Sound Card), `notes` (Additional Notes).
-Daftar ini juga ada di `renderer/app.js` konstanta `SPEC_FIELDS` — **jangan lupa sinkron** kalau
-menambah field baru di kedua tempat (form editor dibangun dari konstanta ini).
 
-## 5. Fitur yang SUDAH JADI & TERUJI
+Skema objek software sama tanpa `specs` dan `steamAppId`, tetapi punya `website`, `category`,
+`version`, `license`, `platform`.
 
-1. Grid library (auto-fill `minmax(250px,1fr)`), kartu 16:9 rasio 460/215, hover glow + tombol overlay
-2. Tombol overlay kartu saat hover: **Copy Link** (clipboard + toast) dan **Hapus** (ikon merah → modal konfirmasi)
-3. Pencarian instan (judul + genre), sort Terbaru/A–Z/Z–A, counter jumlah
-4. Form Tambah/Edit: judul & link wajib (validasi + highlight merah), thumbnail via file picker
-   (disalin ke AppData) ATAU tempel URL (preview live), genre/ukuran/harga opsional, editor spek 2 kolom
-5. Halaman detail gaya Steam Store: hero blur dari thumbnail, panel link + Copy Link + Buka di Browser,
-   tabel System Requirements 2 kolom MINIMUM/RECOMMENDED, tombol Edit/Hapus
-6. Keyboard: `Ctrl+F` fokus cari, `Esc` tutup modal/detail, `Enter` di field link = simpan
-7. Klik kartu → detail; gambar gagal load → placeholder otomatis (error handler capture-phase)
-8. Single instance lock; link eksternal dibuka browser default (bukan window baru)
-9. Installer NSIS + Portable via electron-builder
+Definisi field form ada di `src/constants.js` — **sinkronkan** bila menambah field baru.
 
-## 6. Fitur yang DITUNDUNKAN: "Steam Link" (setengah jadi!)
+## 5. Katalog Bawaan (60 game)
 
-**Konsep**: tombol **"Steam Link"** di sebelah "Tambah Game" → user tempel link
-`https://store.steampowered.com/app/<appid>/...` → app mengambil otomatis dari API publik Steam
-(judul, thumbnail header 460×215, genre, sysreq min/rec) → form Tambah Game terisi otomatis →
-**link Google Drive tetap diisi manual** → Simpan.
+- **20 judul per tahun** untuk 2024, 2025, 2026; campuran AAA dan indie populer; semuanya
+  **single-player/offline** (difilter dengan `category2=2` di Steam search).
+- Data ada di `electron/lib/seed.js`, cover di `seedcovers/` (60 jpg, ~2 MB, ikut dibundel).
+- `ID = builtin-<appid>`, `Link = https://store.steampowered.com/app/<appid>/`.
+- **Penggabungan**: entri bawaan yang belum ada ditambahkan otomatis saat katalog dibaca,
+  termasuk pada `library.json` yang sudah berisi data lama. Entri buatan pengguna tidak pernah
+  ditimpa. Entri bawaan yang dihapus pengguna dicatat di `hidden-builtin.json` agar tidak kembali.
+- Untuk menambah/mengubah judul: edit `builtinCatalog` di `seed.js`, taruh covernya di
+  `seedcovers/seed-<appid>.jpg`. `seedBuiltin` (konstanta di `seed.js`) bisa dimatikan saat menelusuri masalah.
 
-### Status per file:
-| File | Status | Detail |
-|---|---|---|
-| `main.js` | ✅ **SELESAI** | IPC `steam:import` sudah ada: regex ambil appid, fetch `https://store.steampowered.com/api/appdetails?appids=<id>&l=english` (dengan User-Agent), parse `pc_requirements.minimum/recommended` (HTML `<li><strong>Label:</strong> value</li>` → field via `STEAM_LABEL_MAP`), unduh `data.header_image` ke `thumbnails/steam-<appid>-<hash>.jpg` → return `{appId,title,thumbnail,genre,developer,releaseDate,specs}`. Field `steamAppId` juga sudah ditambahkan ke `sanitizeGames`. |
-| `preload.js` | ❌ BELUM | Tambahkan: `steamImport: (url) => ipcRenderer.invoke('steam:import', url),` |
-| `renderer/index.html` | ❌ BELUM | (a) Tombol `#btn-steam` (class `btn ghost` atau kelas baru `btn steam`) DI SEBELAH KIRI `#btn-add` di `.topbar-actions`, dengan icon + teks "Steam Link". (b) Modal baru `#modal-steam` (pola sama seperti `#modal-confirm`): judul "Impor dari Steam", 1 field input `#steam-url` placeholder `https://store.steampowered.com/app/...`, paragraf status `#steam-status` (hidden), footer Batal (`#steam-cancel`, `#steam-close`) + tombol hijau `#steam-fetch` "Ambil Data Steam". |
-| `renderer/app.js` | ❌ BELUM | (a) `openForm(game, prefill)` — tambah parameter opsional `prefill` (dari hasil steamImport); saat `game == null && prefill` isi field judul/genre dari prefill, `state.pendingThumb = prefill.thumbnail`, `fillSpecInputs(prefill.specs)`, simpan `prefill.appId` ke state (mis. `state.pendingSteamAppId`) lalu sertakan sebagai `steamAppId` saat push game baru di `saveGameFromForm`. Edit game lama: pertahankan `steamAppId` yang ada. (b) Fungsi `fetchSteam()`: validasi input non-kosong → tombol loading "Mengambil..." (disable) → `await window.api.steamImport(url)` → sukses: `closeModal()`, `openForm(null, hasil)`, toast "Data terisi otomatis — tinggal isi link Google Drive"; gagal: tampilkan `err.message` di `#steam-status` warna merah. (c) Bind: `#btn-steam` buka modal + fokus input, Enter di `#steam-url` = fetch. |
-| `renderer/styles.css` | ❌ BELUM | Opsional: `.error-text { color:#e57373 }` untuk status, dan class `.btn.steam` bila mau beda warna (usul: background `#1b2838`, border `#3d6a8c`, teks `#66c0f4`) |
-| Test | ❌ BELUM | Alur: restart app → klik Steam Link → tempel `https://store.steampowered.com/app/271590/` (GTA V) → form harus terisi otomatis (judul, thumbnail, genre, 2 kolom spek) → isi link Drive manual → Simpan → cek kartu + halaman detail + library.json |
+## 6. Gerbang Keamanan (load-bearing — jangan dilonggarkan)
 
-### Catatan teknis Steam API
-- Endpoint appdetails **gratis tanpa key**, tetap kirim User-Agent (kadang 403 tanpa UA).
-- Beberapa app return `success:false` (delisted/regional) → sudah ditangani jadi error jelas.
-- `pc_requirements` bisa null / tanpa `recommended` → parser sudah aman (hasil objek kosong → kolom tampil "Belum diisi").
-- `header_image` 460×215 persis rasio kartu — cocok tanpa crop berarti.
-- Bahasa `l=english` dipilih agar teks spek konsisten.
+1. **`safeThumbPath`** di `thumbnails.js` adalah **satu-satunya** jalur ke file thumbnail —
+   dipakai untuk menyajikan (`thumb://`), mengekspor, dan menghapus. Menolak pemisah path,
+   `..`, nama berawalan titik, path absolut, karakter `:`, dan ekstensi di luar allow-list.
+2. **Allow-list ekstensi** gambar (`paths.js`) untuk semua file yang masuk folder thumbnails.
+3. **https-only + allow-list host** untuk unduhan gambar Steam (`steampowered.com`,
+   `steamstatic.com`, `steamcommunity.com`) dan situs vendor; batas 25 MiB.
+4. **Isolasi renderer**: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
+   Renderer hanya melihat `window.softgame`.
+5. **`OpenExternal`** hanya menerima skema http/https dengan host.
+6. **Single instance** lewat `app.requestSingleInstanceLock()`.
+7. **Sanitasi** semua field sebelum ditulis (`sanitize.js`), pemotongan aman-rune.
 
-## 7. Bug yang PERNAH TERJADI (pelajaran — jangan diulang)
+## 7. Fitur yang Sudah Jadi
 
-1. **`renderGrid` dulu menimpa `innerHTML` judul sehingga `<span id="lib-count"> hilang** →
-   `$('#lib-count')` null → render berhenti diam-diam. Fix: judul + counter ditulis sekali
-   sekaligus dalam satu innerHTML. Kalau menambah elemen di dalam `#lib-title`, ingat pola ini.
-2. **Entity HTML `&middot;` di dalam file SVG** bukan entity XML yang valid → SVG rusak & gambar
-   gagal load. Di dalam SVG yang digenerate lewat template string, pakai karakter unicode langsung (`·`).
-3. **`render-png.js` lupa `require('node:url')`** untuk `pathToFileURL` → PNG silently gagal.
-   Saat menambah require di file Electron main-process, selalu cek log stderr-nya.
-4. Accessibility tree Electron kadang butuh observasi kedua (`disableDiffing`) sebelum konten
-   terlihat penuh — tree 13 elemen ≠ app kosong.
+1. Grid library (`repeat(auto-fill, minmax(250px,1fr))`), kartu rasio 460/215, hover glow + overlay
+2. Overlay kartu saat hover: **Copy Link** (clipboard + toast) dan **Hapus** (modal konfirmasi)
+3. Pencarian instan (judul, genre, link; untuk software juga website/kategori/versi/lisensi/platform),
+   sort Terbaru/A–Z/Z–A/kategori, counter jumlah per tab
+4. Form Tambah/Edit dengan field berbeda untuk game (ada blok spek + impor Steam) dan software
+   (tanpa spek). Thumbnail via dialog native **atau** tempel URL
+5. Halaman detail gaya Steam Store: hero blur, chip genre/ukuran/harga, tombol Open/Copy/Save/Edit/Hapus,
+   tabel System Requirements MINIMUM/RECOMMENDED
+6. **Impor Steam**: tempel link `https://store.steampowered.com/app/<appid>/` → judul, developer,
+   tanggal rilis, genre, harga, spek min/rec, dan cover terisi otomatis
+7. **Pencarian Steam** di dalam form impor (hasil bisa langsung diklik)
+8. **Impor software** dari situs resmi vendor (OpenGraph)
+9. Keyboard: `Ctrl/Cmd+F` fokus cari, `Esc` tutup modal/detail, `Enter` simpan
+10. Placeholder otomatis untuk gambar yang gagal dimuat
+11. Installer NSIS per-user (tanpa UAC) lewat `bun run dist`
 
-## 8. Build & Distribusi
+## 8. Verifikasi (wajib setelah mengubah backend/renderer)
 
-- `npm run dist` → `dist/Game Library Setup 1.0.0.exe` (installer NSIS, ±111MB) dan
-  `dist/GameLibrary-Portable-1.0.0.exe` (portable). `dist/win-unpacked/Game Library.exe` = versi
-  terpasang tanpa install (bagus untuk tes cepat hasil build).
-- Ukuran besar itu **normal untuk Electron** (membawa Chromium+Node). Keputusan sudah dibuat:
-  **tetap Electron**, TIDAK pindah ke Tauri (butuh install Rust+MSVC ±4-5GB di mesin dev;
-  user sudah menolak).
-- File exe >100MB → **tidak bisa di-push ke GitHub**; `dist/` sudah di `.gitignore`.
-- Icon exe dibaca dari `assets/icon.ico` (dibangkitkan otomatis dari `assets/logo.svg` saat dev
-  start via `generateIcon()` — hanya jika belum ada).
+```bash
+bun run build
+env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron scripts/verify.mjs   # 17 pemeriksaan backend
+env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron scripts/smoke.mjs    # render + cover
+```
+
+`verify.mjs` menguji: 60 game bawaan, distribusi 20/20/20, link & referensi thumbnail, cover
+tersalin, 3 software contoh, muat ulang tidak menggandakan, `hidden-builtin.json`, gerbang
+keamanan path, dan sanitasi. `smoke.mjs` memuat `dist/index.html` di jendela tersembunyi dan
+melaporkan jumlah kartu, cover yang termuat lewat `thumb://`, serta error konsol.
+
+Keduanya mengalihkan folder data ke direktori sementara (`SOFTGAME_DATA_DIR`), jadi data asli
+pengguna tidak pernah tersentuh.
 
 ## 9. GitHub
 
-- Repo: **https://github.com/daffa-789/game-library** (**public**, akun `daffa-789`)
-- Remote `origin` sudah terpasang di folder proyek, kredensial tersimpan di Windows Credential
-  Manager (push langsung jalan tanpa login).
-- Alur update: `git add -A && git commit -m "..." && git push`
-- `.gitignore`: `node_modules/`, `dist/`, `*.log`, `.zcode/`, `Thumbs.db`, `.DS_Store`
+- Repo: **https://github.com/daffa-789/game-library** (public, akun `daffa-789`)
+- Branch utama: `main`. Remote `origin` sudah terpasang; kredensial tersimpan di Windows
+  Credential Manager sehingga push langsung jalan. Tidak ada `gh` CLI.
+- Tag penting: **`wails-go-final`** = versi terakhir sebelum migrasi ke Bun/Electron.
+- `.gitignore`: `node_modules/`, `dist/`, `build/bin/`, `*.exe`, `*.log`, `.workbuddy-ai/`
 
-## 10. Aset Pendukung (di luar repo)
-
-- **Skill ZCode "logo-toko-digital"** di `C:\Users\Daffa\.agents\skills\logo-toko-digital\`
-  (global, aktif di semua project). Generate 4 gaya logo (appicon/badge/wordmark/banner) ×
-  6 palet → SVG+PNG+preview.html. Skrip: `scripts/generate.mjs` (Node murni) dan
-  `scripts/render-png.js` (dijalankan LEWAT electron untuk konversi PNG; deteksi otomatis bila
-  dijalankan dari folder project yang punya electron di node_modules).
-  Palet tersedia: steam, neon, gamer, sunset, gold, merah.
-- Contoh hasil (untuk "Daffa Game Store"): folder `logo-output/`.
-
-## 11. Konvensi & Selera User (penting!)
+## 10. Konvensi & Selera User (penting!)
 
 - Semua teks UI bahasa Indonesia; toast singkat & ramah (contoh: "Link download disalin! Siap
   dikirim ke pelanggan.")
 - User suka konfirmasi visual (toast) untuk semua aksi.
-- User tidak ingin fitur backup/restore (sudah dihapus per atas permintaan) — JANGAN ditambah lagi.
-- Hapus game selalu lewat modal konfirmasi (sudah ada `askDeleteGame`).
+- **User tidak ingin fitur backup/restore** (sudah dihapus atas permintaan) — jangan ditambah lagi.
+- Hapus entri selalu lewat modal konfirmasi.
+- User lebih percaya hasil yang **dibuktikan empiris** (dijalankan & diukur) daripada klaim dokumentasi.
 - Perubahan besar tanyakan dulu; perubahan kecil langsung kerjakan lalu laporkan.
+- Komentar kode berbahasa Indonesia, menjelaskan *maksud*, bukan menarasikan kode.
 
-## 12. Cara Kerja Cepat (recap untuk melanjutkan)
+## 11. Aset Pendukung (di luar repo)
 
-1. `npm start` untuk development. Setelah edit file renderer, restart app (tidak ada hot reload).
-2. Data uji ada di `%APPDATA%\libray-game\library.json` — bisa dihapus untuk reset ke sample.
-3. Uji visual: screenshot via automation, atau `OPEN_DEVTOOLS=1 npm start` untuk DevTools.
-4. Setelah fitur Steam Link selesai: uji e2e (bagian 6), commit + push, dan rebuild `npm run dist`
-   karena installer di `dist/` belum berisi fitur ini.
+- **Skill logo "logo-toko-digital"** di `C:\Users\Daffa\.agents\skills\logo-toko-digital\` —
+  generate 4 gaya logo (appicon/badge/wordmark/banner) × 6 palet (steam, neon, gamer, sunset, gold,
+  merah) → SVG + PNG + `preview.html`. Konversi PNG dijalankan lewat Electron.
+- Contoh hasil untuk "Daffa Game Store" ada di `logo-output/`.
+
+## 12. Jebakan Lingkungan yang Sudah Terkonfirmasi
+
+1. **`ELECTRON_RUN_AS_NODE=1`** — Electron jadi Node biasa; `require('electron')` mengembalikan
+   `undefined`. Pakai `env -u ELECTRON_RUN_AS_NODE`.
+2. **`BrowserWindow` gagal `ERR_FAILED (-2)`** di sandbox ini kecuali diberi flag Chromium
+   (`no-sandbox`, `in-process-gpu`, `disable-gpu`, `disable-gpu-sandbox`, `disable-dev-shm-usage`).
+   Hanya untuk skrip verifikasi — jangan di aplikasi produksi.
+3. **`crossorigin` dari Vite harus dibuang** — pada `file://` ia memicu CORS yang selalu gagal
+   sehingga modul React tidak dieksekusi.
+4. **CSP hanya disuntikkan saat build** — Vite dev menyuntikkan skrip inline untuk HMR yang
+   diblokir `script-src 'self'`.
+5. **`rm -rf <dir>` sering dimatikan `SIGTERM`** oleh sandbox; pakai `rm -f <daftar file>` lalu `rmdir`.
+6. `reg.exe`, `wmic.exe`, `schtasks.exe` diblokir; membuka `cmd.exe` dari PowerShell diblokir.
+   Operasi yang butuh admin bisa lewat `Start-Process -Verb RunAs -Wait`.
+7. Playbook lengkap: skill **`electron-bun-app-windows`**.
