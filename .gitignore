@@ -13,3 +13,6 @@ target/
 
 # Folder kerja agent (tetap tersembunyi dari git)
 .workbuddy-ai/
+
+# Hasil build installer (regenerable)
+installer/output/

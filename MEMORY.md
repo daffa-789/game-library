@@ -47,6 +47,12 @@ cargo run                  # jalankan dari sumber
 
 `SOFTGAME_DATA_DIR` mengarahkan folder data ke lokasi lain (uji/otomasi saja).
 
+**Installer Windows** (Inno Setup 6, per-user tanpa admin) — script di
+`installer/softgame.iss`, build dengan `ISCC.exe installer\softgame.iss` →
+`installer/output/SoftGameLibrary-Setup-3.0.0.exe` (± 8,7 MB). Versi 14 Okt 2026:
+app Rust sudah dipasang via installer ini (Start Menu + Add/Remove Programs) dan
+versi Electron lama (`C:\Program Files\SoftGame Library`) sudah di-uninstall.
+
 ## 3. Struktur Proyek
 
 ```
@@ -78,6 +84,7 @@ SoftGame/
 │       └── import_modal.rs # Modal impor Steam/situs + pencarian Steam
 ├── build/windows/icon.ico  # Ikon jendela (dipakai main.rs, fallback assets/icon.ico)
 ├── build/appicon.png       # Ikon sumber (tidak dipakai runtime)
+├── installer/              # Script Inno Setup + ikon installer (output/ gitignored)
 ├── assets/                 # icon.svg/ico/png, logo.svg (aset sumber)
 └── logo-output/            # contoh hasil skill logo (tidak dipakai runtime)
 ```

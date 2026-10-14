@@ -108,6 +108,23 @@ Nama binary: `softgame-library` (dapat diubah di `Cargo.toml`).
 
 ---
 
+## Installer Windows
+
+Versi rilis dipasang lewat installer Windows (per-user, tanpa admin):
+
+```bash
+cargo build --release     # binary rilis
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\softgame.iss
+# hasil: installer/output/SoftGameLibrary-Setup-<versi>.exe
+```
+
+Installer memasang aplikasi ke `%LOCALAPPDATA%\Programs\SoftGame Library`
+(shortcut Start Menu, entri Add/Remove Programs, dan uninstaller otomatis).
+Data katalog `%APPDATA%\softgame-library` tidak disentuh saat install maupun
+uninstall. Menambahkan/mengubah isi installer ada di `installer/softgame.iss`.
+
+---
+
 ## Struktur Proyek
 
 ```
