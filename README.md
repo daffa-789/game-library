@@ -135,7 +135,7 @@ SoftGame/
 │       ├── form.rs           # Modal tambah/edit + editor link + editor spesifikasi
 │       └── import_modal.rs   # Modal impor Steam/situs + pencarian Steam
 ├── assets/, logo-output/     # Aset sumber & logo
-└── build/bin/                # Artefak installer lama (Electron era, abaikan)
+└── build/                    # Ikon jendela: windows/icon.ico + appicon.png (dipakai main.rs)
 ```
 
 ---
