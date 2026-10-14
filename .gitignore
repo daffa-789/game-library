@@ -8,6 +8,8 @@ build/bin/
 Thumbs.db
 .zcode/
 
-# Artefak build: jangan ikut ter-commit
-*.exe
+# Artefak build Rust: jangan ikut ter-commit
+target/
+
+# Folder kerja agent (tetap tersembunyi dari git)
 .workbuddy-ai/

@@ -1,6 +1,6 @@
 # SoftGame Library
 
-Aplikasi katalog digital portabel untuk game dan software, dibangun dengan **Electron + React (JSX)**.
+Aplikasi katalog digital portabel untuk game dan software, dibangun dengan **Rust + egui/eframe** (GUI native, tanpa Electron dan tanpa Node.js).
 
 SoftGame Library memungkinkan pengelolaan katalog game dan software, melihat spesifikasi sistem,
 mengimpor metadata langsung dari Steam Store API, mengelola thumbnail secara lokal, dan membagikan
@@ -9,35 +9,35 @@ link unduhan (beberapa mirror: Gofile, PixelDrain, Google Drive, dan sejenisnya)
 Katalog dimulai **kosong** — tidak ada game bawaan maupun data contoh. Semua isi berasal dari input
 pengguna (manual atau hasil impor).
 
-> **Catatan migrasi:** versi sebelumnya dibangun dengan Wails (Go + WebView2) dan frontend vanilla JS.
-> Seluruh kode Go sudah dihapus dan digantikan oleh proses utama Electron + renderer React.
-> Versi Go terakhir tetap tersimpan di riwayat Git pada tag `wails-go-final`.
+> **Catatan migrasi:** versi terakhir sebelum ini dibangun dengan Electron + React (lihat tag
+> `electron-final`), dan sebelum itu dengan Wails (Go, tag `wails-go-final`). Seluruh kode lama
+> sudah dihapus dan digantikan oleh proyek Rust murni ini. Data di
+> `%APPDATA%\softgame-library` tetap kompatibel dua arah — aplikasi Rust membaca dan menulis
+> `library.json` dengan format yang persis sama.
 
 ---
 
 ## Arsitektur & Teknologi
 
-- **Runtime & package manager**: **Node.js 18+** dengan **npm** (proses utama berjalan di Node bawaan Electron)
-- **Shell desktop**: **Electron 33**
-  - Satu instance saja (`requestSingleInstanceLock`); instance kedua memunculkan jendela yang sudah ada.
-  - Jendela disesuaikan dengan work area layar supaya title bar tidak pernah keluar layar.
-  - Protokol kustom `thumb://` menyajikan thumbnail dari folder data, dengan gerbang keamanan yang sama
-    seperti operasi baca/tulis/hapus.
-  - Isolasi renderer: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`.
-    Renderer hanya melihat `window.softgame` dari preload.
-- **Backend**: JavaScript ESM di `electron/`
-  - Persistensi JSON dengan tulis atomik (`.tmp` + rename) dan karantina file rusak.
-  - Cache parse di memori ber-key fingerprint (mtime + size).
-  - Mutex berbasis rantai promise supaya panggilan IPC yang bersamaan tidak saling menyisip.
+- **Rust (edisi 2021)**, GUI langsung dengan **eframe 0.31 / egui 0.31** (immediate-mode native,
+  OpenGL/winit) — satu binary, tanpa webview, tanpa runtime JavaScript.
+- **Backend** (modul Rust di `src/`):
+  - Persistensi JSON dengan tulis atomik (`.tmp` + rename) dan karantina file rusak
+    (`library.json.rusak-<timestamp>`).
+  - `library.json` tetap memakai field camelCase (createdAt/updatedAt/steamAppId) supaya
+    identik dengan versi Go/Electron.
   - Klien Steam Store API (storesearch + appdetails) tanpa API key, lengkap dengan parsing
-    `pc_requirements` menjadi spesifikasi min/rec.
+    `pc_requirements` menjadi spesifikasi minimum/rekomendasi.
   - Scraper OpenGraph untuk impor software dari situs resmi vendor.
-- **Frontend**: **React 18** (JSX) di `src/`, dibundel **Vite 6**
-  - Tema gelap khas Steam (`#171a21`, `#1b2838`, `#66c0f4`).
-  - Grid kartu responsif (`repeat(auto-fill, minmax(250px, 1fr))`).
-  - Rekonsiliasi berbasis key + `React.memo`, jadi kartu tidak dibangun ulang saat mengetik.
-- **Katalog mulai kosong**: tidak ada katalog bawaan maupun data contoh. Entri yang dulu dibuat
-  otomatis oleh versi lama (id `builtin-*` / `sample-*`) dibersihkan sekali jalan saat data dibuka.
+  - Penyerapan katalog aplikasi lama (`%APPDATA%\libray-game`, `%APPDATA%\software-library`)
+    saat folder data pertama kali dibuat.
+- **Keamanan tetap load-bearing** (port dari versi Electron):
+  - Semua akses thumbnail lewat satu gerbang `safe_thumb_path` (nama file polos saja, tanpa
+    traversal, ekstensi gambar dari allow-list, path wajib tetap di dalam folder data).
+  - Link & URL eksternal hanya http/https; unduhan hanya dari host Valve yang dipercaya.
+  - Thumbnail maksimal 25 MiB, library.json maksimal 64 MiB, maksimal 20 mirror per entri.
+- **Katalog mulai kosong**: entri lama ber-id `builtin-*` / `sample-*` (buatan versi sebelumnya)
+  dibersihkan sekali jalan saat data dibuka.
 
 ---
 
@@ -52,38 +52,35 @@ pengguna (manual atau hasil impor).
      "Copy Semua Link" untuk menyalin semuanya sekaligus (satu URL per baris).
 
 2. **Impor otomatis dari Steam Store**
-   - Tempel link Steam apa pun (mis. `https://store.steampowered.com/app/271590/`).
-   - Mengambil judul, developer, tanggal rilis, genre, dan harga.
-   - Mengurai kebutuhan sistem minimum dan rekomendasi.
+   - Tempel link Steam apa pun (mis. `https://store.steampowered.com/app/271590/`), atau
+     ketik nama game lalu tekan Cari untuk menemukan judul yang baru rilis.
+   - Mengambil judul, genre, harga, dan spesifikasi sistem minimum/rekomendasi.
    - Mengunduh dan menyimpan gambar header Steam sebagai thumbnail lokal.
 
-3. **Manajemen katalog (CRUD)**
+3. **Impor software dari situs resmi**
+   - Tempel URL halaman produk; metadata publik (OpenGraph) dipakai sebagai prefill:
+     nama, kategori, versi, lisensi, platform, dan ikon situs.
+
+4. **Manajemen katalog (CRUD)**
    - Tambah, ubah, dan hapus entri game maupun software.
-   - Pencarian langsung dan pengurutan (Terbaru, A-Z, Z-A, kategori).
+   - Pencarian langsung (Ctrl+F) dan pengurutan (Terbaru, A-Z, Z-A, kategori).
    - Filter kategori untuk tab Software, dibangun dari data yang benar-benar ada.
 
-4. **Manajemen thumbnail lokal**
+5. **Manajemen thumbnail lokal**
    - Dialog native Windows untuk PNG, JPG, JPEG, WEBP, GIF, SVG, BMP, dan ICO.
    - Nama file acak (hex) di folder data, dengan proteksi path traversal.
    - Thumbnail lama dibersihkan saat diganti atau entri dihapus.
 
-5. **Berbagi & integrasi sistem**
+6. **Berbagi & integrasi sistem**
    - Salin semua link mirror (atau satu link tertentu) ke clipboard dengan notifikasi toast.
    - Buka link di browser default (hanya skema http/https yang diizinkan).
-
-6. **Persistensi data yang tahan banting**
-   - Tulis atomik mencegah database rusak saat aplikasi tertutup mendadak.
-   - Pemulihan otomatis file rusak dengan cadangan bertimestamp (`library.json.rusak-<timestamp>`).
-   - Kompatibel dua arah dengan `library.json` versi lama: field `link` tunggal otomatis
-     diturunkan menjadi daftar `links`, dan referensi `glib://` / `slib://` dinormalisasi.
 
 ---
 
 ## Kebutuhan Sistem
 
 - **OS**: Windows 10 / 11 (64-bit)
-- **Pengembangan**: Node.js 18+ dan npm
-- **Pemaketan installer**: `electron-builder` (sudah termasuk devDependency)
+- **Pengembangan**: Rust toolchain (cargo) — sudah teruji dengan cargo 1.99
 
 ---
 
@@ -92,52 +89,22 @@ pengguna (manual atau hasil impor).
 - **Database**: `%APPDATA%\softgame-library\library.json`
 - **Thumbnail**: `%APPDATA%\softgame-library\thumbnails\`
 
-Path ini sengaja dipertahankan sama persis dengan versi Go, sehingga data lama langsung terbaca.
-Folder ini juga menjadi `userData` Chromium, jadi cache bawaan Electron (Cache/, GPUCache/, dll.)
-memang muncul di sana.
+Path ini sengaja dipertahankan sama persis dengan versi Go/Electron, sehingga data lama langsung
+terbaca. Variabel lingkungan `SOFTGAME_DATA_DIR` dapat mengarahkan folder data ke lokasi lain
+(hanya untuk pengujian/otomasi).
 
 ---
 
 ## Perintah
 
 ```bash
-npm install        # pasang dependensi
-npm run dev        # mode pengembangan (Vite + Electron, hot reload)
-npm run build      # bundel renderer ke dist/
-npm run start      # jalankan Electron dari hasil build
-npm run verify     # 33 pemeriksaan backend
-npm run smoke      # build + uji render React, cover, mirror, dan editor link
-npm run dist       # bundel renderer + buat installer NSIS
+cargo check      # pemeriksaan cepat (compile tanpa linking)
+cargo build      # build debug -> target/debug/softgame-library.exe
+cargo build --release  # build rilis -> target/release/softgame-library.exe
+cargo run        # jalankan langsung dari sumber
 ```
 
-Installer dihasilkan di `build/bin/SoftGameLibrary-Setup-<versi>-amd64.exe`
-(konfigurasi di `electron-builder.yml`, instalasi per-user, tanpa UAC).
-
-### Catatan lingkungan
-
-Jika `electron` dijalankan dari shell yang menyetel `ELECTRON_RUN_AS_NODE=1`, Electron akan
-berperilaku sebagai Node biasa dan gagal memuat `app`. Jalankan dengan variabel itu dihapus:
-
-```bash
-env -u ELECTRON_RUN_AS_NODE npm run start
-```
-
-`npm run dev` sudah membuang variabel itu dari proses anak, jadi tidak perlu diurus manual.
-
-**Mesin tanpa akses GPU** (mesin virtual, remote desktop, driver rusak) membuat proses GPU
-Chromium mati dan Electron berhenti dengan `GPU process isn't usable. Goodbye.` sebelum jendela
-tampil. Setel `SOFTGAME_SOFTWARE_RENDER=1` untuk memaksa rendering perangkat lunak:
-
-```bash
-SOFTGAME_SOFTWARE_RENDER=1 npm run dev
-```
-
-`npm run dev` juga meneruskan argumen tambahan apa adanya ke Electron, berguna untuk lingkungan
-yang membatasi sandbox Chromium:
-
-```bash
-npm run dev -- --no-sandbox --in-process-gpu
-```
+Nama binary: `softgame-library` (dapat diubah di `Cargo.toml`).
 
 ---
 
@@ -145,55 +112,30 @@ npm run dev -- --no-sandbox --in-process-gpu
 
 ```
 SoftGame/
-├── index.html                 # Entri Vite (shell minimal, <div id="root">)
-├── vite.config.js             # Konfigurasi Vite + penyuntik CSP saat build
-├── electron-builder.yml       # Konfigurasi installer Windows (NSIS)
-├── package.json               # Metadata + skrip (npm)
-├── electron/
-│   ├── main.js                # Proses utama: jendela, single instance, protokol thumb://
-│   ├── preload.cjs            # contextBridge -> window.softgame
-│   └── lib/
-│       ├── paths.js           # Lokasi folder data (identik dengan versi Go)
-│       ├── store.js           # Load/save katalog, tulis atomik, cache, pembersihan data bawaan lama
-│       ├── migrate.js         # Penyerapan katalog aplikasi lama
-│       ├── links.js           # Normalisasi daftar link mirror + tebak nama layanan
-│       ├── text.js            # truncateUTF8 (dipakai sanitize.js & links.js)
-│       ├── sanitize.js        # Pembersihan field, pemotongan aman-rune, UUID v4
-│       ├── steam.js           # Steam Store API + unduh gambar header
-│       ├── website.js         # Impor software dari situs vendor (OpenGraph)
-│       ├── thumbnails.js      # Gerbang keamanan path, dialog native, protokol thumb://
-│       ├── window.js          # Penyesuaian ukuran jendela terhadap layar
-│       ├── system.js          # OpenExternal & CopyText
-│       └── ipc.js             # Pendaftaran seluruh channel IPC
-├── src/                       # Renderer React (JSX)
-│   ├── main.jsx, App.jsx
-│   ├── api.js                 # Pembungkus window.softgame + thumbSrc()
-│   ├── constants.js           # Deskriptor katalog + helper link (linksOf, cleanLinks)
-│   ├── styles.css             # Tema gelap Steam
-│   └── components/            # Toolbar, Grid, Card, DetailPanel, LinksEditor, modal, Toast, dll.
-├── scripts/                   # dev.mjs, verify.mjs, smoke.mjs
-└── assets/, build/, logo-output/   # Aset sumber & ikon
-```
-
----
-
-## Verifikasi
-
-```bash
-# Pemeriksaan backend (katalog kosong, pembersihan data bawaan lama, link mirror,
-# keamanan path, sanitasi)
-npm run verify
-
-# Pemeriksaan renderer (React ter-render, cover lewat thumb://, daftar mirror,
-# editor link bisa menambah/menghapus baris)
-npm run smoke
-```
-
-Di lingkungan yang menyetel `ELECTRON_RUN_AS_NODE=1`, jalankan dengan variabel itu dihapus:
-
-```bash
-env -u ELECTRON_RUN_AS_NODE npm run verify
-env -u ELECTRON_RUN_AS_NODE npm run smoke
+├── Cargo.toml                # Metadata + dependensi Rust
+├── build/windows/icon.ico    # Ikon jendela (dipakai main.rs, fallback assets/icon.ico)
+├── src/
+│   ├── main.rs               # Entry point: jendela eframe + ikon
+│   ├── app.rs                # SoftGameApp: state, aksi katalog/link/thumbnail, loop egui
+│   ├── model.rs              # Tipe data + serde (kompatibel library.json lama)
+│   ├── text.rs               # Pemotongan UTF-8 aman-rune
+│   ├── paths.rs              # Lokasi folder data + allow-list ekstensi
+│   ├── store.rs              # Load/save katalog: tulis atomik, karantina, normalisasi
+│   ├── links.rs              # Normalisasi daftar mirror + tebak nama layanan
+│   ├── sanitize.rs           # Pembersihan field + batas panjang + UUID v4
+│   ├── thumbs.rs             # Gerbang keamanan path, dialog native, baca/tulis/hapus
+│   ├── migrate.rs            # Penyerapan katalog aplikasi lama
+│   ├── system.rs             # OpenExternal & clipboard
+│   ├── steam.rs              # Steam Store API + unduh gambar header
+│   ├── website.rs            # Impor software dari situs vendor (OpenGraph)
+│   └── ui/
+│       ├── mod.rs            # Tema Steam gelap + util bersama (chip, tombol, thumbnail)
+│       ├── grid.rs           # Topbar (brand, tab, pencarian) + grid kartu + keadaan kosong
+│       ├── detail.rs         # Panel hero: cover, mirror, spesifikasi/metadata
+│       ├── form.rs           # Modal tambah/edit + editor link + editor spesifikasi
+│       └── import_modal.rs   # Modal impor Steam/situs + pencarian Steam
+├── assets/, logo-output/     # Aset sumber & logo
+└── build/bin/                # Artefak installer lama (Electron era, abaikan)
 ```
 
 ---
