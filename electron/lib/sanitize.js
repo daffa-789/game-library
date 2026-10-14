@@ -3,6 +3,8 @@
 // Batas panjang memakai truncateUTF8 supaya pemotongan tidak memecah rune.
 // ---------------------------------------------------------------------------
 import crypto from 'node:crypto'
+import { truncateUTF8 } from './text.js'
+import { normalizeItemLinks } from './links.js'
 
 export const maxLenID = 64
 export const maxLenTitle = 200
@@ -17,22 +19,9 @@ export const maxLenPrice = 60
 export const maxLenSteamAppID = 20
 export const maxLenSpecField = 400
 
-// truncateUTF8 memotong string pada batas byte tanpa memecah karakter
-// multibyte. Padanan truncateUTF8 di sanitize.go.
-export function truncateUTF8(s, limit) {
-  if (s == null) return ''
-  const str = String(s)
-  if (Buffer.byteLength(str, 'utf8') <= limit) return str
-  let out = ''
-  let bytes = 0
-  for (const ch of str) {
-    const n = Buffer.byteLength(ch, 'utf8')
-    if (bytes + n > limit) break
-    out += ch
-    bytes += n
-  }
-  return out
-}
+// truncateUTF8 dipakai juga oleh modul lain (mis. links.js) lewat text.js;
+// tetap diekspor di sini agar pemanggil lama tidak perlu berubah.
+export { truncateUTF8 }
 
 function trimmer(value, limit) {
   return truncateUTF8(String(value ?? '').trim(), limit)
@@ -49,11 +38,14 @@ export function sanitizeGame(g, now) {
   out.id = trimmer(out.id, maxLenID)
   out.title = trimmer(out.title, maxLenTitle)
   out.thumbnail = trimmer(out.thumbnail, maxLenRef)
-  out.link = trimmer(out.link, maxLenRef)
   out.genre = trimmer(out.genre, maxLenGenre)
   out.size = trimmer(out.size, maxLenSize)
   out.price = trimmer(out.price, maxLenPrice)
   out.steamAppId = trimmer(out.steamAppId, maxLenSteamAppID)
+
+  // Link unduhan: `links` (banyak mirror) dirapikan, lalu `link` disinkronkan
+  // ke mirror pertama supaya pembaca satu-link tetap mendapat URL yang benar.
+  normalizeItemLinks(out)
 
   out.specs = {
     min: sanitizeSpecs(g.specs?.min),
@@ -88,7 +80,6 @@ export function sanitizeSoftware(sw, now) {
   out.id = trimmer(out.id, maxLenID)
   out.title = trimmer(out.title, maxLenTitle)
   out.thumbnail = trimmer(out.thumbnail, maxLenRef)
-  out.link = trimmer(out.link, maxLenRef)
   out.website = trimmer(out.website, maxLenRef)
   out.category = trimmer(out.category, maxLenCategory)
   out.version = trimmer(out.version, maxLenVersion)
@@ -96,6 +87,10 @@ export function sanitizeSoftware(sw, now) {
   out.platform = trimmer(out.platform, maxLenPlatform)
   out.size = trimmer(out.size, maxLenSize)
   out.price = trimmer(out.price, maxLenPrice)
+
+  // Sama seperti game: mirror link dirapikan lalu `link` disinkronkan.
+  normalizeItemLinks(out)
+
   return out
 }
 

@@ -53,6 +53,13 @@ export function saveThumbnail(ref, suggestedName) {
 export function deleteThumbnail(ref) {
   return invoke('deleteThumbnail', [ref], () => Promise.resolve());
 }
+
+// ---- Link mirror ----
+// Menebak nama layanan dari URL (Gofile, PixelDrain, Google Drive, ...).
+// Dipakai editor link untuk mengisi label otomatis.
+export function guessLinkLabel(url) {
+  return invoke('guessLinkLabel', [url], () => Promise.resolve(''));
+}
 export function openExternal(url) {
   return invoke('openExternal', [url], () => {
     if (typeof window !== 'undefined' && url) window.open(url, '_blank', 'noreferrer');

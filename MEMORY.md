@@ -1,15 +1,17 @@
 # MEMORY.md — SoftGame Library (Dokumentasi Handoff)
 
 > Dokumen ini dibuat agar AI/manusia lain bisa langsung melanjutkan pengerjaan proyek tanpa
-> membaca seluruh riwayat percakapan. Terakhir diupdate: 4 Oktober 2026.
+> membaca seluruh riwayat percakapan. Terakhir diupdate: 7 Oktober 2026.
 
 ---
 
 ## 1. Konteks Bisnis
 
-Pemilik (Daffa) menjual **game digital** (installer game via Google Drive). Aplikasi ini adalah
-**katalog internal toko** di PC-nya: saat pelanggan order, ia buka app → cari judul → cek
-spesifikasi pelanggan → **Copy Link** Google Drive → kirim ke pelanggan.
+Pemilik (Daffa) menjual **game digital** (installer game). File disimpan di **beberapa layanan
+berbeda** — Gofile, PixelDrain, Google Drive, dan sejenisnya — jadi satu judul biasanya punya
+beberapa link mirror. Aplikasi ini adalah **katalog internal toko** di PC-nya: saat pelanggan
+order, ia buka app → cari judul → cek spesifikasi pelanggan → **Copy Link** (satu mirror, atau
+semuanya sekaligus) → kirim ke pelanggan.
 
 - Bahasa UI: **Indonesia** (label spek teknis tetap Inggris: OS, Processor, dst.)
 - Desain: **layout grid gaya Epic Games, tema visual Steam** (biru gelap `#1b2838`, aksen `#66c0f4`)
@@ -40,8 +42,8 @@ npm install
 npm run dev      # Vite + Electron (hot reload)
 npm run build    # bundel renderer ke dist/
 npm run start    # jalankan Electron dari hasil build
-npm run verify   # 17 pemeriksaan backend
-npm run smoke    # build + uji render React dan pemuatan cover
+npm run verify   # 33 pemeriksaan backend
+npm run smoke    # build + uji render React, cover, mirror, dan editor link
 npm run dist     # bundel + installer NSIS ke build/bin/
 ```
 
@@ -67,9 +69,10 @@ SoftGame/
 │   ├── preload.cjs            # contextBridge → window.softgame (satu-satunya jembatan)
 │   └── lib/
 │       ├── paths.js           # Lokasi folder data + allow-list ekstensi thumbnail
-│       ├── store.js           # Load/save katalog, tulis atomik, cache, data contoh
-│       ├── migrate.js         # Penyerapan katalog aplikasi lama
-│       ├── seed.js            # Katalog bawaan 60 game + penggabungan + hidden-builtin
+│       ├── store.js           # Load/save katalog, tulis atomik, cache, pembersihan data bawaan lama
+│       ├── migrate.js         # Penyerapan katalog aplikasi lama (tanpa katalog bawaan)
+│       ├── links.js           # Normalisasi daftar link mirror + tebak nama layanan
+│       ├── text.js            # truncateUTF8 (dipakai sanitize.js & links.js)
 │       ├── sanitize.js        # Pembersihan field, pemotongan aman-rune, UUID v4
 │       ├── steam.js           # Steam Store API + unduh gambar header
 │       ├── website.js         # Impor software dari situs vendor (OpenGraph)
@@ -80,8 +83,7 @@ SoftGame/
 ├── src/                       # Renderer React (JSX)
 │   ├── main.jsx, App.jsx, api.js, constants.js, icons.jsx, styles.css, logo.svg
 │   └── components/            # Toolbar, LibraryBar, Grid, Card, EmptyState, DetailPanel,
-│                              #   EntryFormModal, ConfirmModal, ImportModal, Toast
-├── seedcovers/                # 60 cover bawaan (jpg)
+│                              #   EntryFormModal, LinksEditor, ConfirmModal, ImportModal, Toast
 ├── scripts/                   # dev.mjs, verify.mjs, smoke.mjs
 ├── assets/                    # icon.svg/ico/png, logo.svg (aset sumber)
 ├── build/                     # appicon.png + windows/icon.ico (dipakai electron-builder)
@@ -92,10 +94,11 @@ SoftGame/
 
 - **File data**: `%APPDATA%\softgame-library\library.json` → `{ "games": [...], "software": [...] }`
 - **Thumbnail lokal**: `%APPDATA%\softgame-library\thumbnails\`
-- **Penanda entri bawaan yang dihapus**: `%APPDATA%\softgame-library\hidden-builtin.json`
 - **Karantina file rusak**: `library.json.rusak-<timestamp>`
 
 Path ini **sengaja identik dengan versi Go**, sehingga data lama langsung terbaca. Jangan diubah.
+Folder yang sama juga menjadi `userData` Chromium, jadi cache bawaan Electron (Cache/, GPUCache/,
+Local State, dst.) memang muncul di sana — itu normal, bukan sampah aplikasi.
 
 Referensi thumbnail di data selalu berbentuk `/thumbnails/<file>`. Skema lama `glib://thumb/<file>`
 dan `slib://thumb/<file>` dinormalisasi otomatis saat load. Renderer mengubahnya menjadi
@@ -105,11 +108,15 @@ dan **wajib lewat `safeThumbPath`**.
 ### Skema objek game
 ```jsonc
 {
-  "id": "uuid | builtin-<appid>",
+  "id": "uuid",
   "title": "string (wajib)",
   "thumbnail": "/thumbnails/xxx.jpg | https://... | ''",
-  "link": "URL Google Drive (atau URL Steam Store untuk entri bawaan)",
-  "genre": "string (entri bawaan: genre Steam + ' · <tahun>')",
+  "links": [                                  // banyak mirror (Gofile, PixelDrain, ...)
+    { "label": "Gofile",     "url": "https://gofile.io/d/xxxx" },
+    { "label": "PixelDrain", "url": "https://pixeldrain.com/u/yyyy" }
+  ],
+  "link": "mirror pertama — dipertahankan untuk kompatibilitas file lama",
+  "genre": "string",
   "size": "mis. 90 GB", "price": "mis. Rp 25.000",
   "steamAppId": "string, hasil impor Steam (bisa '')",
   "specs": {
@@ -123,19 +130,30 @@ dan **wajib lewat `safeThumbPath`**.
 Skema objek software sama tanpa `specs` dan `steamAppId`, tetapi punya `website`, `category`,
 `version`, `license`, `platform`.
 
+**Kompatibilitas link**: file lama yang hanya punya `link` (string) tetap terbaca — `normalizeItemLinks`
+di `electron/lib/links.js` menurunkannya menjadi `links` berisi satu mirror saat load, dan
+`link` selalu disinkronkan ke mirror pertama saat simpan. Batas: 20 mirror/entri, hanya http/https,
+duplikat dibuang, label kosong diisi otomatis dari hostname.
+
 Definisi field form ada di `src/constants.js` — **sinkronkan** bila menambah field baru.
 
-## 5. Katalog Bawaan (60 game)
+## 5. Katalog Kosong (per 7 Okt 2026)
 
-- **20 judul per tahun** untuk 2024, 2025, 2026; campuran AAA dan indie populer; semuanya
-  **single-player/offline** (difilter dengan `category2=2` di Steam search).
-- Data ada di `electron/lib/seed.js`, cover di `seedcovers/` (60 jpg, ~2 MB, ikut dibundel).
-- `ID = builtin-<appid>`, `Link = https://store.steampowered.com/app/<appid>/`.
-- **Penggabungan**: entri bawaan yang belum ada ditambahkan otomatis saat katalog dibaca,
-  termasuk pada `library.json` yang sudah berisi data lama. Entri buatan pengguna tidak pernah
-  ditimpa. Entri bawaan yang dihapus pengguna dicatat di `hidden-builtin.json` agar tidak kembali.
-- Untuk menambah/mengubah judul: edit `builtinCatalog` di `seed.js`, taruh covernya di
-  `seedcovers/seed-<appid>.jpg`. `seedBuiltin` (konstanta di `seed.js`) bisa dimatikan saat menelusuri masalah.
+Aplikasi **mulai dengan katalog kosong** — katalog bawaan 60 game, `seedcovers/`, `seed.js`, dan
+data contoh sudah **dihapus atas permintaan user**. Jangan menambahkan kembali data bawaan apa pun
+tanpa diminta eksplisit.
+
+- `bootstrapLibrary()` (`migrate.js`) hanya menyerap data dari folder aplikasi lama
+  (`libray-game`, `software-library`); kalau tidak ada, kedua katalog dikembalikan kosong.
+- Saat pertama dibuka, `library.json` langsung ditulis berisi `{"games":[],"software":[]}`.
+- **Pembersihan sekali jalan**: `purgeLegacySeedEntries()` di `store.js` membuang entri dengan id
+  berawalan `builtin-` atau `sample-` yang terlanjur tersimpan di mesin yang pernah menjalankan
+  versi lama, lalu menulis ulang file. Entri pengguna (UUID) tidak pernah disentuh.
+- Sisa file `sample-*.svg` di `%APPDATA%\softgame-library\thumbnails\` dari versi lama boleh
+  dibiarkan (tidak ada entri yang menunjuk ke sana) atau dihapus manual.
+- `electron-builder.yml` **tidak lagi** membundel `seedcovers/`, tetapi **wajib** tetap membundel
+  `build/windows/icon.ico` karena `main.js` memakai ikon itu untuk jendela (sebelumnya hilang di
+  build produksi dan memunculkan peringatan "Failed to load image").
 
 ## 6. Gerbang Keamanan (load-bearing — jangan dilonggarkan)
 
@@ -154,13 +172,16 @@ Definisi field form ada di `src/constants.js` — **sinkronkan** bila menambah f
 ## 7. Fitur yang Sudah Jadi
 
 1. Grid library (`repeat(auto-fill, minmax(250px,1fr))`), kartu rasio 460/215, hover glow + overlay
-2. Overlay kartu saat hover: **Copy Link** (clipboard + toast) dan **Hapus** (modal konfirmasi)
-3. Pencarian instan (judul, genre, link; untuk software juga website/kategori/versi/lisensi/platform),
-   sort Terbaru/A–Z/Z–A/kategori, counter jumlah per tab
+2. Overlay kartu saat hover: **Copy Link** (menyalin **semua** mirror, satu URL per baris) dan
+   **Hapus** (modal konfirmasi)
+3. Pencarian instan (judul, genre, **semua URL+label mirror**; untuk software juga
+   website/kategori/versi/lisensi/platform), sort Terbaru/A–Z/Z–A/kategori, counter jumlah per tab
 4. Form Tambah/Edit dengan field berbeda untuk game (ada blok spek + impor Steam) dan software
-   (tanpa spek). Thumbnail via dialog native **atau** tempel URL
-5. Halaman detail gaya Steam Store: hero blur, chip genre/ukuran/harga, tombol Open/Copy/Save/Edit/Hapus,
-   tabel System Requirements MINIMUM/RECOMMENDED
+   (tanpa spek). Thumbnail via dialog native. **Editor link mirror** (`LinksEditor.jsx`): baris
+   label+URL bisa ditambah/dihapus bebas, label ditebak otomatis dari URL, duplikat ditandai
+5. Halaman detail gaya Steam Store: hero blur, chip genre/ukuran/harga, **daftar mirror** dengan
+   tombol Copy/Buka per link + "Copy Semua Link (n)", tombol Save/Edit/Hapus, tabel System
+   Requirements MINIMUM/RECOMMENDED
 6. **Impor Steam**: tempel link `https://store.steampowered.com/app/<appid>/` → judul, developer,
    tanggal rilis, genre, harga, spek min/rec, dan cover terisi otomatis
 7. **Pencarian Steam** di dalam form impor (hasil bisa langsung diklik)
@@ -172,19 +193,27 @@ Definisi field form ada di `src/constants.js` — **sinkronkan** bila menambah f
 ## 8. Verifikasi (wajib setelah mengubah backend/renderer)
 
 ```bash
-npm run verify   # 17 pemeriksaan backend
-npm run smoke    # build + render React dan pemuatan cover
+npm run verify   # 33 pemeriksaan backend
+npm run smoke    # build + render React, cover, daftar mirror, editor link
 ```
 
 Di lingkungan ini jalankan dengan `env -u ELECTRON_RUN_AS_NODE npm run verify` (lihat §12).
 
-`verify.mjs` menguji: 60 game bawaan, distribusi 20/20/20, link & referensi thumbnail, cover
-tersalin, 3 software contoh, muat ulang tidak menggandakan, `hidden-builtin.json`, gerbang
-keamanan path, dan sanitasi. `smoke.mjs` memuat `dist/index.html` di jendela tersembunyi dan
-melaporkan jumlah kartu, cover yang termuat lewat `thumb://`, serta error konsol.
+`verify.mjs` menguji: katalog dimulai kosong, `library.json` awal benar, penyimpanan entri pengguna,
+normalisasi banyak mirror (duplikat/skema terlarang/label otomatis/`link` = mirror pertama),
+kompatibilitas field `link` lama, pembersihan entri `builtin-*` & `sample-*`, helper `links.js`,
+gerbang keamanan path, dan sanitasi. `smoke.mjs` menyiapkan folder data uji (termasuk satu gambar
+kecil), memuat `dist/index.html` di jendela tersembunyi, lalu memeriksa jumlah kartu, cover yang
+termuat lewat `thumb://`, jumlah baris mirror di halaman detail, tombol Copy Semua, dan bahwa
+editor link bisa menambah/menghapus baris.
 
 Keduanya mengalihkan folder data ke direktori sementara (`SOFTGAME_DATA_DIR`), jadi data asli
 pengguna tidak pernah tersentuh.
+
+> **Penting saat menulis skrip probe sendiri**: `SOFTGAME_DATA_DIR` harus disetel **sebelum**
+> modul `electron/lib/*` dievaluasi. ESM mengevaluasi seluruh `import` statis lebih dulu, jadi
+> pakai `await import(...)` di dalam `app.whenReady()` — kalau tidak, `paths.js` akan memakai
+> folder data asli pengguna dan katalog aslinya bisa tertimpa.
 
 ## 9. GitHub
 

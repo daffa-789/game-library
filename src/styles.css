@@ -544,6 +544,42 @@ input, select { font-family: inherit; }
   user-select: text;
 }
 
+/* Daftar mirror download (satu baris per layanan penyimpanan) */
+.mirror-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.mirror-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mirror-name {
+  flex-shrink: 0;
+  min-width: 96px;
+  max-width: 160px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  color: var(--text-bright);
+  background: rgba(102, 192, 244, .12);
+  border: 1px solid #3b5a75;
+  border-radius: 3px;
+  padding: 6px 9px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mirror-row .dl-link {
+  flex: 1;
+  min-width: 140px;
+  padding: 7px 10px;
+}
+
 .detail-actions { display: flex; gap: 10px; margin-top: 16px; }
 
 .detail-body {
@@ -712,6 +748,28 @@ input, select { font-family: inherit; }
   border-color: #d05858;
   box-shadow: 0 0 0 2px rgba(208, 88, 88, .18);
 }
+
+/* Editor link mirror di form: satu baris = label layanan + URL + tombol hapus */
+.links-field { margin-top: 16px; }
+.links-editor { display: flex; flex-direction: column; gap: 8px; }
+.link-row { display: flex; gap: 8px; align-items: center; }
+.link-row .link-label { flex: 0 0 190px; }
+.link-row .link-url { flex: 1; min-width: 0; }
+/* URL yang sama muncul lebih dari sekali: backend membuang duplikatnya. */
+.link-row .link-url.dup {
+  border-color: #c9a227;
+  box-shadow: 0 0 0 2px rgba(201, 162, 39, .15);
+}
+.link-del { flex-shrink: 0; color: #d05858; }
+.link-del:hover { color: #fff; background: #8a3a3a; }
+.links-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.links-hint { font-size: 11.5px; color: #55636f; line-height: 1.5; }
 
 /* Thumbnail di form */
 .thumb-row { display: flex; gap: 16px; align-items: flex-start; }

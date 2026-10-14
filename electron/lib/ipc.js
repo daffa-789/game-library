@@ -10,6 +10,7 @@ import { steamSearch, steamImport } from './steam.js'
 import { importSoftware } from './website.js'
 import { pickThumbnail, saveThumbnail, deleteThumbnail } from './thumbnails.js'
 import { openExternal, copyText } from './system.js'
+import { serviceLabel } from './links.js'
 
 // Setiap handler mengembalikan nilai yang bisa diserialisasi; error dilempar
 // ulang sebagai Error biasa supaya renderer bisa menampilkan pesan aslinya.
@@ -41,6 +42,11 @@ export function registerIpc(getWindow) {
   handle('softgame:pickThumbnail', () => pickThumbnail())
   handle('softgame:saveThumbnail', (ref, title) => saveThumbnail(ref, title))
   handle('softgame:deleteThumbnail', (ref) => deleteThumbnail(ref))
+
+  // Link
+  // Menebak nama layanan (Gofile, PixelDrain, Google Drive, ...) dari URL,
+  // dipakai form untuk mengisi label mirror secara otomatis.
+  handle('softgame:guessLinkLabel', (url) => serviceLabel(url))
 
   // Sistem
   handle('softgame:openExternal', (url) => openExternal(url))

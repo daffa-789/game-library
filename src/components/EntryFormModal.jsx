@@ -10,10 +10,13 @@ import {
   PLACEHOLDER_IMG,
   isStoredThumb,
   formFields,
+  linksOf,
+  cleanLinks,
   txt,
 } from '../constants';
 import { pickThumbnail, thumbSrc } from '../api';
 import { CloseIcon, ImageIcon } from '../icons';
+import LinksEditor from './LinksEditor.jsx';
 
 // Nilai awal field teks: dari entri lama (edit) atau hasil impor (prefill).
 function initValues(def, item, prefill) {
@@ -30,6 +33,14 @@ function initValues(def, item, prefill) {
     }
   }
   return vals;
+}
+
+// Nilai awal daftar link. Bentuk lama (satu field `link`) dan bentuk baru
+// (`links`) sama-sama diterima lewat linksOf; hasilnya selalu minimal satu
+// baris kosong supaya siap diisi.
+function initLinks(item, prefill) {
+  const list = linksOf(item || prefill);
+  return list.length ? list : [{ label: '', url: '' }];
 }
 
 // Nilai awal spesifikasi (hanya katalog game).
@@ -56,6 +67,8 @@ export default function EntryFormModal({ tab, item, prefill, onClose, onSave, on
 
   const [values, setValues] = useState(() => initValues(def, item, prefill));
   const [specs, setSpecs] = useState(() => initSpecs(def, item, prefill));
+  const [links, setLinks] = useState(() => initLinks(item, prefill));
+  const [linksInvalid, setLinksInvalid] = useState(false);
   const [pendingThumb, setPendingThumb] = useState(() =>
     adding ? txt(prefill && prefill.thumbnail) : txt(item && item.thumbnail));
   // steamAppId dari impor tidak pernah berubah selama modal terbuka; hanya
@@ -115,9 +128,30 @@ export default function EntryFormModal({ tab, item, prefill, onClose, onSave, on
       return;
     }
     setInvalid({});
+
+    // Daftar mirror: minimal satu URL http/https yang sah. Duplikat dan URL
+    // tidak valid dibuang otomatis oleh cleanLinks.
+    const cleanedLinks = cleanLinks(links);
+    if (!cleanedLinks.length) {
+      setLinksInvalid(true);
+      const el = inputs.current.link;
+      if (el) el.focus();
+      onToast('Isi minimal satu link download yang valid', true);
+      return;
+    }
+    setLinksInvalid(false);
+
     setBusy(true);
     // pendingThumb & pendingSteamAppId baru masuk ke entri di titik ini.
-    const fields = { ...vals, thumbnail: pendingThumb, ...def.extraFields(pendingSteamAppId, item) };
+    const fields = {
+      ...vals,
+      thumbnail: pendingThumb,
+      links: cleanedLinks,
+      // `link` dipertahankan sebagai mirror pertama supaya file lama dan
+      // pembaca satu-link tetap bekerja.
+      link: cleanedLinks[0].url,
+      ...def.extraFields(pendingSteamAppId, item),
+    };
     if (def.hasSpecs) {
       const trimmed = { min: {}, rec: {} };
       for (const side of ['min', 'rec']) {
@@ -132,7 +166,8 @@ export default function EntryFormModal({ tab, item, prefill, onClose, onSave, on
     }
   }
 
-  // Satu field teks dari deskriptor. Field link jadi tombol Enter untuk simpan.
+  // Satu field teks dari deskriptor. Enter memindahkan fokus ke field berikutnya
+  // (tombol simpan tetap yang menyimpan).
   function fieldNode(f) {
     return (
       <div className="field" key={f.k}>
@@ -147,7 +182,6 @@ export default function EntryFormModal({ tab, item, prefill, onClose, onSave, on
           value={values[f.k] || ''}
           ref={(el) => { inputs.current[f.k] = el; }}
           onChange={(e) => setField(f.k, e.target.value)}
-          onKeyDown={f.k === 'link' ? (e) => { if (e.key === 'Enter') handleSave(); } : undefined}
         />
       </div>
     );
@@ -170,6 +204,17 @@ export default function EntryFormModal({ tab, item, prefill, onClose, onSave, on
               : <div className="frow two" key={`row-${i}`}>{row.map(fieldNode)}</div>
           ))}
         </div>
+
+        {/* Daftar mirror: bisa ditambah/dihapus baris sebanyak yang diperlukan. */}
+        <LinksEditor
+          def={def}
+          links={links}
+          onChange={setLinks}
+          invalid={linksInvalid}
+          onEnter={handleSave}
+          onToast={onToast}
+          firstUrlRef={(el) => { inputs.current.link = el; }}
+        />
 
         <div className="field thumb-field">
           <label>Thumbnail</label>

@@ -1,7 +1,7 @@
 // DetailPanel.jsx
 // Halaman detail entri: hero dengan cover + aksi link, lalu panel bawah yang
 // berbeda antara game (tabel spesifikasi) dan software (ringkasan metadata).
-import { PLACEHOLDER_IMG, isStoredThumb, txt } from '../constants';
+import { PLACEHOLDER_IMG, isStoredThumb, linksOf, txt } from '../constants';
 import { thumbSrc } from '../api';
 import { BackIcon, LinkIcon, ExternalIcon, SaveIcon, EditIcon, TrashIcon } from '../icons';
 
@@ -67,11 +67,15 @@ function PanelBody({ panel }) {
   );
 }
 
-export default function DetailPanel({ item, def, onBack, onCopy, onOpen, onSite, onEdit, onDelete, onSaveImage }) {
+export default function DetailPanel({
+  item, def, onBack, onCopyAll, onCopyLink, onOpenLink, onSite, onEdit, onDelete, onSaveImage,
+}) {
   const chips = def.chips(item);
   const src = thumbSrc(item.thumbnail) || PLACEHOLDER_IMG;
   const site = def.websiteField ? txt(item[def.websiteField]).trim() : '';
   const panel = def.detailPanel(item);
+  // Semua mirror entri ini; bentuk lama (satu `link`) ikut dibaca.
+  const links = linksOf(item);
 
   const handleImgError = (e) => {
     if (e.currentTarget.src !== PLACEHOLDER_IMG) e.currentTarget.src = PLACEHOLDER_IMG;
@@ -98,19 +102,41 @@ export default function DetailPanel({ item, def, onBack, onCopy, onOpen, onSite,
             </div>
 
             <div className="dl-panel">
-              <div className="dl-label">{def.linkLabel}</div>
-              <div className="dl-row">
-                <div className="dl-link" title={txt(item.link)}>
-                  {txt(item.link) ? item.link : '— belum ada link —'}
-                </div>
-                <button className="btn green big" id="d-copy" onClick={onCopy}>
-                  <LinkIcon /> Copy Link
-                </button>
-                <button className="btn ghost" id="d-open" onClick={onOpen} disabled={!item.link}>
-                  <ExternalIcon />
-                  Buka di Browser
-                </button>
+              <div className="dl-label">
+                {def.linkLabel}
+                {links.length > 1 ? ` — ${links.length} MIRROR` : ''}
               </div>
+
+              {links.length ? (
+                <div className="mirror-list" id="d-mirrors">
+                  {links.map((link, i) => (
+                    <div className="mirror-row" key={`${link.url}-${i}`}>
+                      <span className="mirror-name" title={link.label}>{link.label || 'Link'}</span>
+                      <span className="dl-link" title={link.url}>{link.url}</span>
+                      <button className="btn green small" onClick={() => onCopyLink(link.url)}>
+                        Copy
+                      </button>
+                      <button className="btn ghost small" onClick={() => onOpenLink(link.url)}>
+                        <ExternalIcon />
+                        Buka
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="dl-row">
+                  <div className="dl-link">— belum ada link —</div>
+                </div>
+              )}
+
+              {links.length > 1 && (
+                <div className="dl-row">
+                  <button className="btn green big" id="d-copy" onClick={onCopyAll}>
+                    <LinkIcon />
+                    Copy Semua Link ({links.length})
+                  </button>
+                </div>
+              )}
             </div>
 
             {site && (

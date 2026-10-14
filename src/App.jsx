@@ -10,7 +10,7 @@
 //   toast  -> null | { msg, error, show }
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api';
-import { CATALOGS, isStoredThumb, txt } from './constants';
+import { CATALOGS, isStoredThumb, linksOf, txt } from './constants';
 import Toolbar from './components/Toolbar.jsx';
 import LibraryBar from './components/LibraryBar.jsx';
 import Grid from './components/Grid.jsx';
@@ -166,20 +166,44 @@ export default function App() {
 
   const showLibrary = useCallback(() => patchUi({ selectedId: null }), [patchUi]);
 
-  const copyLink = useCallback(async (id) => {
+  // Salin SEMUA mirror sebuah entri (satu URL per baris). Dipakai tombol
+  // "Copy Link" di kartu dan "Copy Semua Link" di halaman detail.
+  const copyAllLinks = useCallback(async (id) => {
     const t = tabRef.current;
     const d = CATALOGS[t];
     const item = itemsRef.current[t].find((x) => x.id === id);
     if (!item) return;
-    if (!item.link) {
+    const list = linksOf(item);
+    if (!list.length) {
       showToast(`${d.nounCap} ini belum punya link download`, true);
       return;
     }
     try {
-      await api.copyText(item.link);
-      showToast('Link download disalin! Siap dikirim ke pelanggan.');
+      await api.copyText(list.map((l) => l.url).join('\n'));
+      showToast(list.length > 1
+        ? `${list.length} link mirror disalin! Siap dikirim ke pelanggan.`
+        : 'Link download disalin! Siap dikirim ke pelanggan.');
     } catch (err) {
       showToast('Gagal menyalin link', true);
+    }
+  }, [showToast]);
+
+  // Salin satu mirror saja (tombol Copy per baris di halaman detail).
+  const copyOneLink = useCallback(async (url) => {
+    try {
+      await api.copyText(url);
+      showToast('Link disalin!');
+    } catch (err) {
+      showToast('Gagal menyalin link', true);
+    }
+  }, [showToast]);
+
+  // Buka satu mirror di browser bawaan.
+  const openLink = useCallback(async (url) => {
+    try {
+      await api.openExternal(url);
+    } catch (err) {
+      showToast('Gagal membuka link', true);
     }
   }, [showToast]);
 
@@ -303,8 +327,9 @@ export default function App() {
           item={selectedItem}
           def={def}
           onBack={showLibrary}
-          onCopy={() => copyLink(selectedItem.id)}
-          onOpen={() => { if (selectedItem.link) api.openExternal(selectedItem.link); }}
+          onCopyAll={() => copyAllLinks(selectedItem.id)}
+          onCopyLink={copyOneLink}
+          onOpenLink={openLink}
           onSite={(url) => api.openExternal(url)}
           onEdit={() => openForm(tab, selectedItem)}
           onDelete={() => askDelete(selectedItem.id)}
@@ -341,7 +366,7 @@ export default function App() {
               def={def}
               selectedId={u.selectedId}
               onSelect={handleSelect}
-              onCopy={copyLink}
+              onCopy={copyAllLinks}
               onDelete={askDelete}
             />
           )}

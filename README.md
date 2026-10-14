@@ -4,7 +4,10 @@ Aplikasi katalog digital portabel untuk game dan software, dibangun dengan **Ele
 
 SoftGame Library memungkinkan pengelolaan katalog game dan software, melihat spesifikasi sistem,
 mengimpor metadata langsung dari Steam Store API, mengelola thumbnail secara lokal, dan membagikan
-link unduhan (Google Drive) dengan cepat.
+link unduhan (beberapa mirror: Gofile, PixelDrain, Google Drive, dan sejenisnya) dengan cepat.
+
+Katalog dimulai **kosong** — tidak ada game bawaan maupun data contoh. Semua isi berasal dari input
+pengguna (manual atau hasil impor).
 
 > **Catatan migrasi:** versi sebelumnya dibangun dengan Wails (Go + WebView2) dan frontend vanilla JS.
 > Seluruh kode Go sudah dihapus dan digantikan oleh proses utama Electron + renderer React.
@@ -33,18 +36,20 @@ link unduhan (Google Drive) dengan cepat.
   - Tema gelap khas Steam (`#171a21`, `#1b2838`, `#66c0f4`).
   - Grid kartu responsif (`repeat(auto-fill, minmax(250px, 1fr))`).
   - Rekonsiliasi berbasis key + `React.memo`, jadi kartu tidak dibangun ulang saat mengetik.
-- **Katalog bawaan**: 60 game Steam offline (20 judul per tahun 2024/2025/2026) di `seedcovers/`
-  + `electron/lib/seed.js`, langsung tampil saat aplikasi pertama kali dibuka.
+- **Katalog mulai kosong**: tidak ada katalog bawaan maupun data contoh. Entri yang dulu dibuat
+  otomatis oleh versi lama (id `builtin-*` / `sample-*`) dibersihkan sekali jalan saat data dibuka.
 
 ---
 
 ## Fitur Utama
 
-1. **Katalog bawaan 60 game offline**
-   - 20 judul untuk masing-masing tahun 2024, 2025, dan 2026, campuran AAA dan indie populer.
-   - Cover asli Steam ikut dibundel; link mengarah ke halaman Steam Store game bersangkutan.
-   - Digabung otomatis ke katalog yang sudah ada tanpa menimpa entri buatan pengguna.
-   - Entri bawaan yang dihapus pengguna dicatat di `hidden-builtin.json` agar tidak muncul lagi.
+1. **Link unduhan banyak mirror**
+   - Satu entri bisa punya banyak link karena file disimpan di layanan berbeda
+     (Gofile, PixelDrain, Google Drive, MEGA, MediaFire, OneDrive, TeraBox, dst).
+   - Menambah, mengubah, dan menghapus baris link langsung dari form entri.
+   - Label layanan dikenali otomatis dari URL bila dibiarkan kosong.
+   - Halaman detail menampilkan tiap mirror dengan tombol Copy/Buka sendiri, plus
+     "Copy Semua Link" untuk menyalin semuanya sekaligus (satu URL per baris).
 
 2. **Impor otomatis dari Steam Store**
    - Tempel link Steam apa pun (mis. `https://store.steampowered.com/app/271590/`).
@@ -63,13 +68,14 @@ link unduhan (Google Drive) dengan cepat.
    - Thumbnail lama dibersihkan saat diganti atau entri dihapus.
 
 5. **Berbagi & integrasi sistem**
-   - Salin link unduhan ke clipboard dengan notifikasi toast.
+   - Salin semua link mirror (atau satu link tertentu) ke clipboard dengan notifikasi toast.
    - Buka link di browser default (hanya skema http/https yang diizinkan).
 
 6. **Persistensi data yang tahan banting**
    - Tulis atomik mencegah database rusak saat aplikasi tertutup mendadak.
    - Pemulihan otomatis file rusak dengan cadangan bertimestamp (`library.json.rusak-<timestamp>`).
-   - Kompatibel dua arah dengan `library.json` versi lama (termasuk referensi `glib://` / `slib://`).
+   - Kompatibel dua arah dengan `library.json` versi lama: field `link` tunggal otomatis
+     diturunkan menjadi daftar `links`, dan referensi `glib://` / `slib://` dinormalisasi.
 
 ---
 
@@ -85,9 +91,10 @@ link unduhan (Google Drive) dengan cepat.
 
 - **Database**: `%APPDATA%\softgame-library\library.json`
 - **Thumbnail**: `%APPDATA%\softgame-library\thumbnails\`
-- **Penanda entri bawaan yang dihapus**: `%APPDATA%\softgame-library\hidden-builtin.json`
 
 Path ini sengaja dipertahankan sama persis dengan versi Go, sehingga data lama langsung terbaca.
+Folder ini juga menjadi `userData` Chromium, jadi cache bawaan Electron (Cache/, GPUCache/, dll.)
+memang muncul di sana.
 
 ---
 
@@ -98,8 +105,8 @@ npm install        # pasang dependensi
 npm run dev        # mode pengembangan (Vite + Electron, hot reload)
 npm run build      # bundel renderer ke dist/
 npm run start      # jalankan Electron dari hasil build
-npm run verify     # 17 pemeriksaan backend
-npm run smoke      # build + uji render React dan pemuatan cover
+npm run verify     # 33 pemeriksaan backend
+npm run smoke      # build + uji render React, cover, mirror, dan editor link
 npm run dist       # bundel renderer + buat installer NSIS
 ```
 
@@ -147,9 +154,10 @@ SoftGame/
 │   ├── preload.cjs            # contextBridge -> window.softgame
 │   └── lib/
 │       ├── paths.js           # Lokasi folder data (identik dengan versi Go)
-│       ├── store.js           # Load/save katalog, tulis atomik, cache, data contoh
+│       ├── store.js           # Load/save katalog, tulis atomik, cache, pembersihan data bawaan lama
 │       ├── migrate.js         # Penyerapan katalog aplikasi lama
-│       ├── seed.js            # Katalog bawaan 60 game + penggabungan
+│       ├── links.js           # Normalisasi daftar link mirror + tebak nama layanan
+│       ├── text.js            # truncateUTF8 (dipakai sanitize.js & links.js)
 │       ├── sanitize.js        # Pembersihan field, pemotongan aman-rune, UUID v4
 │       ├── steam.js           # Steam Store API + unduh gambar header
 │       ├── website.js         # Impor software dari situs vendor (OpenGraph)
@@ -160,10 +168,9 @@ SoftGame/
 ├── src/                       # Renderer React (JSX)
 │   ├── main.jsx, App.jsx
 │   ├── api.js                 # Pembungkus window.softgame + thumbSrc()
-│   ├── constants.js           # Deskriptor katalog (field, sort, placeholder)
+│   ├── constants.js           # Deskriptor katalog + helper link (linksOf, cleanLinks)
 │   ├── styles.css             # Tema gelap Steam
-│   └── components/            # Toolbar, Grid, Card, DetailPanel, modal, Toast, dll.
-├── seedcovers/                # 60 cover bawaan (jpg)
+│   └── components/            # Toolbar, Grid, Card, DetailPanel, LinksEditor, modal, Toast, dll.
 ├── scripts/                   # dev.mjs, verify.mjs, smoke.mjs
 └── assets/, build/, logo-output/   # Aset sumber & ikon
 ```
@@ -173,10 +180,12 @@ SoftGame/
 ## Verifikasi
 
 ```bash
-# Pemeriksaan backend (katalog bawaan, keamanan path, sanitasi, hidden-builtin)
+# Pemeriksaan backend (katalog kosong, pembersihan data bawaan lama, link mirror,
+# keamanan path, sanitasi)
 npm run verify
 
-# Pemeriksaan renderer (React benar-benar ter-render + cover termuat lewat thumb://)
+# Pemeriksaan renderer (React ter-render, cover lewat thumb://, daftar mirror,
+# editor link bisa menambah/menghapus baris)
 npm run smoke
 ```
 

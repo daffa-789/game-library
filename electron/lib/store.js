@@ -8,16 +8,18 @@
 //     separuh tertulis;
 //   - cache hasil parse di memori dengan fingerprint (mtime+size) supaya
 //     LoadLibrary / LoadSoftware tidak selalu membaca dan parse dari disk.
+//
+// Katalog sengaja TIDAK lagi membawa data bawaan: aplikasi dimulai dengan
+// katalog kosong dan seluruh isinya berasal dari input pengguna.
 // ---------------------------------------------------------------------------
 import fs from 'node:fs'
-import path from 'node:path'
-import { dataDir, dataFile, thumbsDir, thumbRefPrefix } from './paths.js'
+import { dataDir, dataFile } from './paths.js'
 import { sanitizeGame, sanitizeSoftware } from './sanitize.js'
-import { mergeBuiltinGames, recordHiddenBuiltin, builtinGames, seedBuiltin } from './seed.js'
 import {
   normalizeGameThumbs,
   normalizeSoftwareThumbs,
 } from './thumbnails.js'
+import { normalizeCatalogLinks } from './links.js'
 import { bootstrapLibrary } from './migrate.js'
 
 export const maxGames = 5000
@@ -75,9 +77,8 @@ function quarantineLibrary() {
 // ---------------------------------------------------------------------------
 
 // loadLocked membaca katalog dari disk (lewat cache bila masih valid). File
-// yang belum ada dibangun dari katalog bawaan + hasil migrasi aplikasi lama.
-// Katalog bawaan digabung juga ke library yang sudah ada, jadi pembaruan
-// aplikasi tetap menambah judul baru tanpa menyentuh entri buatan pengguna.
+// yang belum ada dibangun dari hasil migrasi aplikasi lama; kalau tidak ada
+// apa pun untuk dimigrasi, katalog dimulai kosong.
 export async function loadLocked() {
   let stat
   try {
@@ -123,20 +124,26 @@ export async function loadLocked() {
   }
   normalizeGameThumbs(data.games)
   normalizeSoftwareThumbs(data.software)
+  // Data lama hanya punya satu `link`; di sini diturunkan menjadi daftar mirror
+  // supaya renderer selalu menerima bentuk yang seragam.
+  normalizeCatalogLinks(data.games)
+  normalizeCatalogLinks(data.software)
+
+  // Entri yang dulu dibuat otomatis (katalog bawaan / data contoh) dibersihkan
+  // sekali jalan supaya mesin yang sudah pernah menjalankan versi lama ikut
+  // mulai dengan katalog kosong.
+  if (purgeLegacySeedEntries(data)) {
+    try {
+      writeLibraryLocked(data)
+      return data
+    } catch {
+      /* gagal menulis: lanjutkan dengan data di memori */
+    }
+  }
 
   cache = data
   cacheFinger = finger
   cacheValid = true
-
-  if (mergeBuiltinGames(data)) {
-    // Gagal menulis tidak boleh menggagalkan load: katalog bawaan tetap
-    // tampil di sesi ini dan digabung ulang pada pembukaan berikutnya.
-    try {
-      writeLibraryLocked(data)
-    } catch {
-      /* diabaikan dengan sengaja */
-    }
-  }
 
   return data
 }
@@ -206,10 +213,6 @@ export function saveLibrary(games) {
     normalizeGameThumbs(sanitized)
 
     const prev = await loadLocked()
-    // Entri bawaan yang tidak ikut tersimpan berarti sengaja dihapus
-    // pengguna; catat supaya tidak ditambahkan ulang saat aplikasi dibuka.
-    recordHiddenBuiltin(prev.games, sanitized)
-
     prev.games = sanitized
     writeLibraryLocked(prev)
   })
@@ -231,161 +234,35 @@ export function saveSoftware(items) {
 }
 
 // ---------------------------------------------------------------------------
-// Data contoh
+// Pembersihan data bawaan versi lama
 // ---------------------------------------------------------------------------
 
-// createSampleData mengisi library.json pertama dengan 2 game + 3 software
-// contoh (+ thumbnail SVG-nya) supaya tampilan pertama langsung menjelaskan
-// cara pakai aplikasi.
-export function createSampleData() {
-  const svg = (title, sub) =>
-    '<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215">' +
-    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
-    '<stop offset="0" stop-color="#2a475e"/><stop offset="1" stop-color="#141d28"/>' +
-    '</linearGradient></defs><rect width="460" height="215" fill="url(#g)"/>' +
-    '<text x="230" y="115" font-family="Segoe UI, Arial" font-size="32" font-weight="700" fill="#e5e5e5" text-anchor="middle">' +
-    title +
-    '</text><text x="230" y="145" font-family="Segoe UI, Arial" font-size="13" fill="#8f98a0" text-anchor="middle">' +
-    sub +
-    '</text></svg>'
+// legacySeedIDPrefixes penanda entri yang dulu dibuat otomatis oleh aplikasi:
+// "builtin-" untuk katalog 60 game bawaan, "sample-" untuk data contoh.
+// Entri buatan pengguna selalu memakai UUID, jadi prefix ini tidak pernah
+// bertabrakan dengan entri asli.
+const legacySeedIDPrefixes = ['builtin-', 'sample-']
 
-  const samples = [
-    ['sample-gta.svg', 'GTA V', 'Action, Open World'],
-    ['sample-elden.svg', 'ELDEN RING', 'Action RPG, Souls-like'],
-    ['sample-photoshop.svg', 'PHOTOSHOP 2025', 'Desain Grafis'],
-    ['sample-office.svg', 'OFFICE 2021', 'Produktivitas'],
-    ['sample-capcut.svg', 'CAPCUT DESKTOP', 'Editing Video'],
-  ]
-  fs.mkdirSync(thumbsDir, { recursive: true })
-  for (const [file, title, sub] of samples) {
-    try {
-      fs.writeFileSync(path.join(thumbsDir, file), svg(title, sub), 'utf8')
-    } catch {
-      // Thumbnail contoh gagal ditulis hanya berarti kartu memakai placeholder.
-    }
-  }
-
-  const now = new Date().toISOString()
-  const emptySpecs = () => ({
-    os: '', cpu: '', ram: '', gpu: '', dx: '', net: '', storage: '', sound: '', notes: '',
-  })
-
-  return {
-    games: [
-      {
-        id: 'sample-1',
-        title: 'Grand Theft Auto V',
-        thumbnail: thumbRefPrefix + 'sample-gta.svg',
-        link: 'https://drive.google.com/drive/folders/sample-gta-link',
-        genre: 'Action, Open World',
-        size: '110 GB',
-        price: 'Rp 400.000',
-        steamAppId: '',
-        createdAt: now,
-        updatedAt: now,
-        specs: {
-          min: {
-            ...emptySpecs(),
-            os: 'Windows 10 64 Bit',
-            cpu: 'Intel Core 2 Quad CPU Q6600 @ 2.40GHz',
-            ram: '4 GB RAM',
-            gpu: 'NVIDIA 9800 GT 1GB / AMD HD 4870 1GB',
-            dx: 'Version 10',
-            storage: '110 GB',
-          },
-          rec: {
-            ...emptySpecs(),
-            os: 'Windows 10 64 Bit',
-            cpu: 'Intel Core i5 3470 @ 3.2GHz',
-            ram: '8 GB RAM',
-            gpu: 'NVIDIA GTX 660 2GB / AMD HD 7870 2GB',
-            dx: 'Version 11',
-            storage: '110 GB',
-          },
-        },
-      },
-      {
-        id: 'sample-2',
-        title: 'ELDEN RING',
-        thumbnail: thumbRefPrefix + 'sample-elden.svg',
-        link: 'https://drive.google.com/drive/folders/sample-elden-link',
-        genre: 'Action RPG, Souls-like',
-        size: '60 GB',
-        price: 'Rp 599.000',
-        steamAppId: '',
-        createdAt: now,
-        updatedAt: now,
-        specs: {
-          min: {
-            ...emptySpecs(),
-            os: 'Windows 10',
-            cpu: 'INTEL CORE I5-8400 or AMD RYZEN 3 3300X',
-            ram: '12 GB RAM',
-            gpu: 'NVIDIA GEFORCE GTX 1060 3 GB or AMD RADEON RX 580 4 GB',
-            dx: 'Version 12',
-            storage: '60 GB',
-          },
-          rec: {
-            ...emptySpecs(),
-            os: 'Windows 10/11',
-            cpu: 'INTEL CORE I7-8700K or AMD RYZEN 5 3600X',
-            ram: '16 GB RAM',
-            gpu: 'NVIDIA GEFORCE GTX 1070 8 GB or AMD RADEON RX VEGA 56 8 GB',
-            dx: 'Version 12',
-            storage: '60 GB',
-          },
-        },
-      },
-    ],
-    software: [
-      {
-        id: 'sample-sw-1',
-        title: 'Adobe Photoshop 2025',
-        thumbnail: thumbRefPrefix + 'sample-photoshop.svg',
-        link: 'https://drive.google.com/drive/folders/contoh-link-ps',
-        website: 'https://www.adobe.com/products/photoshop.html',
-        category: 'Desain Grafis',
-        version: '26.1',
-        license: 'Trial 7 hari',
-        platform: 'Windows 10/11',
-        size: '4 GB',
-        price: 'Rp 75.000',
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'sample-sw-2',
-        title: 'Microsoft Office LTSC 2021',
-        thumbnail: thumbRefPrefix + 'sample-office.svg',
-        link: 'https://drive.google.com/drive/folders/contoh-link-office',
-        website: 'https://learn.microsoft.com/office/',
-        category: 'Produktivitas & Perkantoran',
-        version: 'LTSC 2021',
-        license: 'Full / Activate',
-        platform: 'Windows 10/11',
-        size: '4 GB',
-        price: 'Rp 60.000',
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'sample-sw-3',
-        title: 'CapCut Desktop',
-        thumbnail: thumbRefPrefix + 'sample-capcut.svg',
-        link: 'https://drive.google.com/drive/folders/contoh-link-capcut',
-        website: 'https://www.capcut.com/',
-        category: 'Editing Video',
-        version: '5.1',
-        license: 'Gratis',
-        platform: 'Windows 10/11',
-        size: '1,2 GB',
-        price: 'Gratis',
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-  }
+// isLegacySeedEntry true bila entri dibuat otomatis oleh versi sebelumnya.
+export function isLegacySeedEntry(item) {
+  const id = String(item?.id ?? '')
+  return legacySeedIDPrefixes.some((p) => id.startsWith(p))
 }
 
-// Dipakai migrate.js untuk membangun katalog awal.
-export { seedBuiltin, builtinGames }
+// purgeLegacySeedEntries membuang entri bawaan/contoh yang sudah terlanjur
+// tersimpan di library.json mesin pengguna. Mengembalikan true bila ada yang
+// dibuang, supaya pemanggil tahu file perlu ditulis ulang.
+export function purgeLegacySeedEntries(data) {
+  let removed = false
+
+  const keep = (list) => {
+    if (!Array.isArray(list)) return []
+    const out = list.filter((item) => !isLegacySeedEntry(item))
+    if (out.length !== list.length) removed = true
+    return out
+  }
+
+  data.games = keep(data.games)
+  data.software = keep(data.software)
+  return removed
+}

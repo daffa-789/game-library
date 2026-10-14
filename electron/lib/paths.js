@@ -9,12 +9,23 @@ import { app } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 
+// baseAppData mengembalikan %APPDATA% pada pemakaian normal. Dibungkus
+// try/catch supaya kegagalan memetakan folder sistem tidak membuat seluruh
+// proses utama gagal dimuat (jalur mundurnya folder data aplikasi standar).
+function baseAppData() {
+  try {
+    return app.getPath('appData')
+  } catch {
+    return app.getPath('userData')
+  }
+}
+
 // SOFTGAME_DATA_DIR hanya dipakai untuk pengujian/otomasi: mengarahkan folder
 // data ke lokasi sementara supaya data asli pengguna tidak pernah tersentuh.
 // Pada pemakaian normal variabel ini kosong dan path-nya tetap %APPDATA%.
 export const dataDir = process.env.SOFTGAME_DATA_DIR
   ? path.resolve(process.env.SOFTGAME_DATA_DIR)
-  : path.join(app.getPath('appData'), 'softgame-library')
+  : path.join(baseAppData(), 'softgame-library')
 export const dataFile = path.join(dataDir, 'library.json')
 export const thumbsDir = path.join(dataDir, 'thumbnails')
 
@@ -25,7 +36,7 @@ const legacyDataDirNames = ['libray-game', 'software-library']
 // legacyDirs hanya berisi folder yang benar-benar ada di disk.
 export const legacyDirs = legacyDataDirNames
   .filter((name) => name !== 'softgame-library')
-  .map((name) => path.join(app.getPath('appData'), name))
+  .map((name) => path.join(baseAppData(), name))
   .filter((dir) => fs.existsSync(dir))
 
 // Prefix referensi thumbnail yang dipakai frontend / AssetServer.

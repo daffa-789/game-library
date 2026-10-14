@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('softgame', {
   saveThumbnail: (ref, title) => call('softgame:saveThumbnail', ref, title),
   deleteThumbnail: (ref) => call('softgame:deleteThumbnail', ref),
 
+  // Link
+  guessLinkLabel: (url) => call('softgame:guessLinkLabel', url),
+
   // Sistem
   openExternal: (url) => call('softgame:openExternal', url),
   copyText: (text) => call('softgame:copyText', text),

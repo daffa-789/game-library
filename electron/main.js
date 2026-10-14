@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 import { app, BrowserWindow, protocol, net, shell } from 'electron'
 import path from 'node:path'
+import fs from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { registerIpc } from './lib/ipc.js'
@@ -20,6 +21,46 @@ import {
 } from './lib/window.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// ---------------------------------------------------------------------------
+// Resolusi berkas bawaan
+//
+// Saat dipaketkan, seluruh kode berada di dalam app.asar sehingga path relatif
+// terhadap modul ini tetap benar. Dua helper di bawah menambahkan jalur mundur
+// ke app.getAppPath() dan memeriksa keberadaan berkas lebih dulu, supaya build
+// produksi tidak pernah diam-diam kehilangan ikon atau halaman renderer.
+// ---------------------------------------------------------------------------
+
+// firstExisting mengembalikan kandidat pertama yang benar-benar ada di disk.
+function firstExisting(candidates) {
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate
+    } catch {
+      /* kandidat tidak bisa diperiksa; coba berikutnya */
+    }
+  }
+  return null
+}
+
+// resolveAppIcon mencari ikon jendela. Mengembalikan null bila tidak ada —
+// Electron memakai ikon bawaan dan tidak mencatat peringatan.
+function resolveAppIcon() {
+  return firstExisting([
+    path.join(__dirname, '..', 'build', 'windows', 'icon.ico'),
+    path.join(app.getAppPath(), 'build', 'windows', 'icon.ico'),
+  ])
+}
+
+// resolveIndexFile mencari halaman hasil build renderer (dist/index.html).
+function resolveIndexFile() {
+  return (
+    firstExisting([
+      path.join(__dirname, '..', 'dist', 'index.html'),
+      path.join(app.getAppPath(), 'dist', 'index.html'),
+    ]) || path.join(__dirname, '..', 'dist', 'index.html')
+  )
+}
 
 // Lingkungan tanpa akses GPU (mesin virtual, remote desktop, atau driver yang
 // rusak) membuat proses GPU Chromium mati dan Electron berhenti dengan pesan
@@ -59,6 +100,8 @@ if (!gotTheLock) app.quit()
 let mainWindow = null
 
 function createWindow() {
+  const icon = resolveAppIcon()
+
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
@@ -68,7 +111,7 @@ function createWindow() {
     show: false,
     autoHideMenuBar: true,
     title: 'SoftGame Library',
-    icon: path.join(__dirname, '..', 'build', 'windows', 'icon.ico'),
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -93,7 +136,7 @@ function createWindow() {
   if (devUrl) {
     mainWindow.loadURL(devUrl)
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    mainWindow.loadFile(resolveIndexFile())
   }
 
   mainWindow.on('closed', () => {

@@ -51,6 +51,82 @@ export function isStoredThumb(ref) {
   return !!ref && (ref.startsWith('/thumbnails/') || ref.startsWith('glib://') || ref.startsWith('slib://'));
 }
 
+/* ==========================================================================
+   Link unduhan (mirror)
+   ========================================================================== */
+
+// MAX_LINKS batas jumlah mirror per entri. Samakan dengan maxLinks di
+// electron/lib/links.js supaya UI tidak membolehkan lebih dari yang disimpan.
+export const MAX_LINKS = 20;
+
+// withScheme menambahkan https:// bila URL ditempel tanpa skema.
+export function withScheme(value) {
+  const s = txt(value).trim();
+  if (!s) return '';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return s;
+  return 'https://' + s;
+}
+
+// isValidLinkURL true hanya untuk http/https yang punya hostname. Skema lain
+// (javascript:, file:, dst) selalu ditolak.
+export function isValidLinkURL(value) {
+  const s = withScheme(value);
+  if (!s) return false;
+  try {
+    const u = new URL(s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname;
+  } catch (err) {
+    return false;
+  }
+}
+
+// linksOf mengubah referensi apa pun menjadi daftar mirror { label, url }.
+// Mendukung bentuk baru (item.links) maupun field `link` tunggal versi lama,
+// jadi data lama tetap tampil walau belum pernah dibuka di versi ini.
+export function linksOf(item) {
+  const raw = (item && Array.isArray(item.links) && item.links.length)
+    ? item.links
+    : (item && item.link ? [{ url: item.link }] : []);
+
+  const out = [];
+  for (const entry of raw) {
+    if (out.length >= MAX_LINKS) break;
+    const isObj = entry && typeof entry === 'object';
+    const url = withScheme(isObj ? entry.url : entry);
+    if (!isValidLinkURL(url)) continue;
+    out.push({ label: isObj ? txt(entry.label).trim() : '', url });
+  }
+  return out;
+}
+
+// cleanLinks merapikan baris editor sebelum disimpan: hanya URL valid, label
+// dirapikan, duplikat dibuang, dan jumlah dibatasi MAX_LINKS.
+export function cleanLinks(list) {
+  const out = [];
+  const seen = new Set();
+  for (const entry of Array.isArray(list) ? list : []) {
+    if (out.length >= MAX_LINKS) break;
+    const url = withScheme(entry && entry.url);
+    if (!isValidLinkURL(url)) continue;
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label: txt(entry && entry.label).trim(), url });
+  }
+  return out;
+}
+
+// linkText menggabungkan semua mirror jadi satu teks: dipakai pencarian dan
+// tombol "Copy Semua Link".
+export function linkText(item) {
+  return linksOf(item).map((l) => l.url).join('\n');
+}
+
+// linkSearchText versi untuk pencarian: label ikut dicari.
+export function linkSearchText(item) {
+  return linksOf(item).map((l) => `${l.label} ${l.url}`).join(' ');
+}
+
 // Baris field form diratakan jadi daftar field (dipakai untuk baca/tulis nilai).
 export function formFields(def) {
   return def.formRows.flat();
@@ -73,7 +149,6 @@ export const CATALOGS = {
     formRows: [
       [
         { k: 'title', l: 'Judul Game *', p: 'mis. Grand Theft Auto V', req: true },
-        { k: 'link', l: 'Link Download (Google Drive) *', p: 'https://drive.google.com/file/d/...', req: true },
       ],
       [
         { k: 'genre', l: 'Genre', p: 'mis. Action, RPG' },
@@ -81,11 +156,15 @@ export const CATALOGS = {
       ],
     ],
     hasSpecs: true,
-    linkLabel: 'LINK DOWNLOAD GOOGLE DRIVE',
+    linkLabel: 'LINK DOWNLOAD (MIRROR)',
+    linkTitle: 'Link Download',
+    linksHint: 'Satu baris untuk tiap layanan penyimpanan (Gofile, PixelDrain, Google Drive, MEGA, ...). Label dikenali otomatis dari URL.',
+    linkLabelPlaceholder: 'Layanan (mis. Gofile)',
+    linkUrlPlaceholder: 'https://gofile.io/d/xxxxxxxx',
     categoryField: null,
     sortOptions: [['new', 'Terbaru'], ['az', 'Judul A–Z'], ['za', 'Judul Z–A']],
-    // Pencarian mencakup judul, genre, dan link.
-    haystack: (g) => [g.title, g.genre, g.link],
+    // Pencarian mencakup judul, genre, dan semua link mirror.
+    haystack: (g) => [g.title, g.genre, linkSearchText(g)],
     cardSub: (g) => [g.genre, g.size].filter(Boolean).join(' · '),
     chips: (g) => [
       g.genre ? ['chip', g.genre] : null,
@@ -121,7 +200,7 @@ export const CATALOGS = {
       placeholder: 'https://store.steampowered.com/app/271590/',
       fetchLabel: 'Ambil Data Steam',
       needUrl: 'Masukkan link Steam Store terlebih dahulu.',
-      okToast: 'Data terisi otomatis — tinggal isi link Google Drive',
+      okToast: 'Data terisi otomatis — tinggal isi link download',
       failToast: 'Gagal mengambil data dari Steam.',
     },
   },
@@ -138,7 +217,6 @@ export const CATALOGS = {
     formRows: [
       [
         { k: 'title', l: 'Nama Software *', p: 'mis. Adobe Photoshop 2025', req: true },
-        { k: 'link', l: 'Link Download *', p: 'https://drive.google.com/file/d/...', req: true },
       ],
       [
         { k: 'website', l: 'Situs Resmi', p: 'https://www.adobe.com/products/photoshop.html' },
@@ -157,11 +235,15 @@ export const CATALOGS = {
       ],
     ],
     hasSpecs: false,
-    linkLabel: 'LINK DOWNLOAD',
+    linkLabel: 'LINK DOWNLOAD (MIRROR)',
+    linkTitle: 'Link Download',
+    linksHint: 'Satu baris untuk tiap layanan penyimpanan (Gofile, PixelDrain, Google Drive, MEGA, ...). Label dikenali otomatis dari URL.',
+    linkLabelPlaceholder: 'Layanan (mis. Gofile)',
+    linkUrlPlaceholder: 'https://pixeldrain.com/u/xxxxxxxx',
     categoryField: 'category',
     sortOptions: [['new', 'Terbaru'], ['az', 'Nama A–Z'], ['za', 'Nama Z–A'], ['cat', 'Kategori']],
-    // Pencarian mencakup judul, link, dan metadata software lainnya.
-    haystack: (s) => [s.title, s.category, s.version, s.license, s.platform, s.website, s.link],
+    // Pencarian mencakup judul, metadata software, dan semua link mirror.
+    haystack: (s) => [s.title, s.category, s.version, s.license, s.platform, s.website, linkSearchText(s)],
     cardSub: (s) => [s.category, s.version, s.size].filter(Boolean).join(' · '),
     chips: (s) => [
       s.category ? ['chip', s.category] : null,
